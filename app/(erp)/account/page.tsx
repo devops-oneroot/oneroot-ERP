@@ -156,7 +156,7 @@ return (
 
             <Field label="Current Password" required>
               <Input
-                type="password"
+                isPassword
                 autoComplete="current-password"
                 value={current}
                 onChange={(e) => setCurrent(e.target.value)}
@@ -170,7 +170,7 @@ return (
               hint="At least 6 characters"
             >
               <Input
-                type="password"
+                isPassword
                 autoComplete="new-password"
                 value={next}
                 onChange={(e) => setNext(e.target.value)}
@@ -187,7 +187,7 @@ return (
 
             <Field label="Confirm New Password" required>
               <Input
-                type="password"
+                isPassword
                 autoComplete="new-password"
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}

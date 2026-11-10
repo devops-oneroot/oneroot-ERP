@@ -573,7 +573,7 @@ function UserForm({
           required={!editing}
           hint={editing ? "Leave blank to keep the current password" : "At least 6 characters"}
         >
-          <Input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required={!editing} />
+          <Input isPassword autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required={!editing} />
         </Field>
         <div className="sm:col-span-2">
           <DepartmentRolePicker
