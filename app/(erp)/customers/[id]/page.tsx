@@ -37,6 +37,7 @@ import { useApi } from "@/lib/hooks";
 import type { Customer, CustomerReminder, Dec, Ledger, Paged, Payment, PaymentMode, PaymentStatus, ReminderChannel, Sale, StoreSettings } from "@/lib/types";
 import { MONEY_MODES, modeLabel } from "@/lib/types";
 import { LazyCustomerForm } from "@/components/lazy";
+import { BookingsCard } from "@/components/Bookings";
 
 interface CustomerDetail extends Customer {
   stats: { totalPurchases: Dec; invoiceCount: number; lastPurchase: string | null };
@@ -51,7 +52,7 @@ interface CustomerDetail extends Customer {
   }[];
 }
 
-type Tab = "ledger" | "invoices" | "payments" | "reminders";
+type Tab = "ledger" | "invoices" | "payments" | "bookings" | "reminders";
 const RECEIPT_MODES: PaymentMode[] = [...MONEY_MODES];
 const CHANNEL_LABEL: Record<ReminderChannel, string> = { WHATSAPP: "WhatsApp", SMS: "SMS", CALL: "Phone Call", VISIT: "Visit", NOTE: "Note" };
 
@@ -189,6 +190,7 @@ export default function CustomerDetailPage() {
           { value: "ledger", label: "Ledger" },
           ...(can("sales.view") ? [{ value: "invoices" as const, label: `Invoices (${c.stats.invoiceCount})` }] : []),
           ...(can("payments.view") ? [{ value: "payments" as const, label: "Payments" }] : []),
+          ...(can("bookings.view") ? [{ value: "bookings" as const, label: n(c.advanceBalance) > 0 ? `Advance Bookings (${inr(c.advanceBalance)} held)` : "Advance Bookings" }] : []),
           { value: "reminders", label: c.lastReminder ? `Reminders (last ${date(c.lastReminder.sentAt)})` : "Reminders" },
         ]}
       />
@@ -196,6 +198,7 @@ export default function CustomerDetailPage() {
       {tab === "ledger" && <LedgerTab key={version} customer={c} settings={settings} />}
       {tab === "invoices" && <InvoicesTab key={version} customerId={c.id} />}
       {tab === "payments" && <PaymentsTab key={version} customerId={c.id} />}
+      {tab === "bookings" && <BookingsCard key={version} customer={c} />}
       {tab === "reminders" && <RemindersTab key={version} customer={c} onLogged={refresh} />}
 
       <LazyCustomerForm

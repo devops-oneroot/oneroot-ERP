@@ -46,7 +46,7 @@ import { isFestival, offerConditions, offerCoverage, purposeName, purposeRibbon 
 import { combinePct, covers, offerLabel, priceLines, remainingOf, type PricedLine } from "@/lib/pricing";
 import { defaultPrintMode, printReceipt, receiptWidth } from "@/lib/print";
 import { useScanner } from "@/lib/scanner";
-import { MONEY_MODES, modeLabel, type Batch, type Category, type Customer, type CustomerType, type HeldBill, type Paged, type PaymentMode, type Product, type RoleLimit, type Sale, type Scheme, type Shift, type StoreSettings, type VanTripDetail } from "@/lib/types";
+import { MONEY_MODES, modeLabel, type AdvanceBooking, type Batch, type Category, type Customer, type CustomerType, type HeldBill, type Paged, type PaymentMode, type Product, type RoleLimit, type Sale, type Scheme, type Shift, type StoreSettings, type VanTripDetail } from "@/lib/types";
 import { LazyCameraScanner, LazyCustomerForm } from "@/components/lazy";
 
 /** Product list row with the POS extras from `withExpiry=true` */
@@ -198,6 +198,10 @@ export default function PosPage() {
   // Split payment: several modes on one bill (cash + UPI, credit note + cash…)
   const [split, setSplit] = useState(false);
   const [parts, setParts] = useState<Part[]>([]);
+  /** Bookings whose advance the cashier chose not to use on this bill */
+  const [skipAdvance, setSkipAdvance] = useState<string[]>([]);
+  /** Delivered bookings whose leftover advance the cashier chose to use on this bill */
+  const [useLeftover, setUseLeftover] = useState<string[]>([]);
   const [interState, setInterState] = useState(false);
   const [notes, setNotes] = useState("");
   // Agent who brought the sale in: saved with the sale for internal reference, never printed on the bill
@@ -227,6 +231,8 @@ export default function PosPage() {
     (c: Customer | null) => {
       setCustomer(c);
       setCredit(null);
+      setSkipAdvance([]);
+      setUseLeftover([]);
       setInterState(c ? placeOfSupply(c, store).interState === true : false);
       setReceived(null);
       if (c?.phone) setPhone(c.phone);
@@ -236,6 +242,15 @@ export default function PosPage() {
     },
     [store, mode],
   );
+
+  // The customer's open advance bookings (needs internet: the advance is checked on the server when the bill is saved)
+  const customerId = customer?.id ?? null;
+  const canBookings = can("sales.bill");
+  const bookingsQ = useApi<AdvanceBooking[]>(customerId && online && canBookings ? `/bookings/customer/${customerId}` : null);
+  /** Customer's advance bookings with units to deliver or advance left (applied automatically when their products are billed) */
+  const bookings = useMemo(() => (customerId ? (bookingsQ.data ?? []).filter((b) => b.customerId === customerId) : []), [bookingsQ.data, customerId]);
+  /** Units booked (not yet delivered) per product, to warn before selling stock someone has booked */
+  const bookedQ = useApi<Record<string, number>>(needBranch.blocked || !online || !canBookings ? null : "/bookings/booked");
 
   // Preselect a customer from ?customerId=
   const presetId = params.get("customerId");
@@ -375,6 +390,18 @@ export default function PosPage() {
     );
   }
 
+  /**
+   * Units of a product booked (advance taken) by customers other than the one on this bill. Selling them is allowed —
+   * a booking is for this batch or a later one — the cart line just says so. Recomputed when the customer changes, so
+   * the note goes away once the customer who booked it is picked.
+   */
+  const bookedByOthers = (productId: string) => {
+    const all = n(bookedQ.data?.[productId]);
+    if (all <= 0) return 0;
+    const own = bookings.reduce((s, b) => s + b.items.filter((i) => i.productId === productId).reduce((t, i) => t + i.remaining, 0), 0);
+    return Math.max(0, all - own);
+  };
+
   const update = (key: number, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const remove = (key: number) => setLines((ls) => ls.filter((l) => l.key !== key));
 
@@ -473,11 +500,55 @@ export default function PosPage() {
   }, [lines, owner, summary.count]);
   const aboveLimit = !!limits && limits.maxDiscountPct !== null && summary.manualMax > n(limits.maxDiscountPct) + 1e-9;
 
-  const defaultReceived = mode === "CREDIT" ? 0 : summary.total;
+  // ── Advance bookings (mirrors the server): a booking pays for its booked units on this bill, up to their value ──
+  const advances = useMemo(() => {
+    const avail = new Map<string, { qty: number; value: number }>();
+    for (const l of lines) {
+      const a = avail.get(l.product.id) ?? { qty: 0, value: 0 };
+      avail.set(l.product.id, { qty: a.qty + n(l.quantity), value: a.value + lineGross(l, pricing.byKey.get(l.key)) * summary.factor });
+    }
+    let room = summary.total;
+    const rows: { booking: AdvanceBooking; amount: number; applied: boolean; leftover: boolean; units: string }[] = [];
+    for (const b of bookings) {
+      if (b.unused <= 0) continue;
+      const open = b.items.filter((i) => i.remaining > 0);
+      const leftover = open.length === 0;
+      const applied = leftover ? useLeftover.includes(b.id) : !skipAdvance.includes(b.id);
+      let cap = 0;
+      const units: string[] = [];
+      for (const i of open) {
+        const a = avail.get(i.productId);
+        if (!a || a.qty <= 0) continue;
+        const q = Math.min(i.remaining, a.qty);
+        const v = (a.value / a.qty) * q;
+        cap += v;
+        units.push(`${i.product.name} × ${qty(q)}`);
+        if (applied) {
+          a.qty -= q;
+          a.value -= v;
+        }
+      }
+      if (!leftover && !units.length) continue; // none of its products on the bill
+      const amount = round2(Math.max(0, Math.min(b.unused, leftover ? room : Math.min(cap, room))));
+      if (applied) room = round2(room - amount);
+      rows.push({ booking: b, amount, applied, leftover, units: leftover ? "leftover advance" : units.join(", ") });
+    }
+    return rows;
+  }, [lines, pricing, summary, bookings, skipAdvance, useLeftover]);
+  const usedAdvances = advances.filter((a) => a.applied && a.amount > 0);
+  const advanceTotal = round2(usedAdvances.reduce((s, a) => s + a.amount, 0));
+  /** What is left to pay after advances */
+  const payable = round2(summary.total - advanceTotal);
+  const toggleAdvance = (a: (typeof advances)[number]) =>
+    a.leftover
+      ? setUseLeftover((s) => (s.includes(a.booking.id) ? s.filter((x) => x !== a.booking.id) : [...s, a.booking.id]))
+      : setSkipAdvance((s) => (s.includes(a.booking.id) ? s.filter((x) => x !== a.booking.id) : [...s, a.booking.id]));
+
+  const defaultReceived = mode === "CREDIT" ? 0 : payable;
   const receivedAmt = received === null ? defaultReceived : n(received);
   const partsTotal = round2(parts.reduce((s, p) => s + n(p.amount), 0));
-  const change = !split && mode === "CASH" ? round2(receivedAmt - summary.total) : 0;
-  const paidAmount = round2(Math.min(split ? partsTotal : receivedAmt, summary.total));
+  const change = !split && mode === "CASH" ? round2(receivedAmt - payable) : 0;
+  const paidAmount = round2(Math.min(split ? partsTotal : receivedAmt, payable) + advanceTotal);
   const due = round2(summary.total - paidAmount);
   // Credit notes the customer still holds (from the customer detail; applied as a payment mode)
   const availableCredit = round2(n(credit?.creditNoteBalance));
@@ -525,10 +596,10 @@ export default function PosPage() {
 
   /** Switch to a split payment; with a credit note first when the customer has one */
   function startSplit(withCreditNote = false) {
-    const note = withCreditNote ? round2(Math.min(availableCredit, summary.total)) : 0;
+    const note = withCreditNote ? round2(Math.min(availableCredit, payable)) : 0;
     const rows: Part[] = [];
     if (note > 0) rows.push({ key: ++partSeq, mode: "CREDIT_NOTE", amount: String(note), reference: "" });
-    rows.push({ key: ++partSeq, mode: "CASH", amount: String(round2(summary.total - note)), reference: "" });
+    if (payable - note > 0) rows.push({ key: ++partSeq, mode: "CASH", amount: String(round2(payable - note)), reference: "" });
     setParts(rows);
     setSplit(true);
     setReceived(null);
@@ -536,7 +607,7 @@ export default function PosPage() {
   const updatePart = (key: number, patch: Partial<Part>) => setParts((ps) => ps.map((p) => (p.key === key ? { ...p, ...patch } : p)));
   const removePart = (key: number) => setParts((ps) => ps.filter((p) => p.key !== key));
   function addPart() {
-    const rest = round2(Math.max(0, summary.total - partsTotal));
+    const rest = round2(Math.max(0, payable - partsTotal));
     setParts((ps) => [...ps, { key: ++partSeq, mode: ps.some((p) => p.mode === "CASH") ? "UPI" : "CASH", amount: rest ? String(rest) : "", reference: "" }]);
   }
 
@@ -557,14 +628,15 @@ export default function PosPage() {
     }
     if (summary.total <= 0) return "Bill total must be more than zero";
     if (!agentId) return "Choose the agent for this bill";
-    if (!split && !mode) return "Choose the payment type";
+    if (advanceTotal > 0 && !online) return "Setting an advance against the bill needs internet — untick the advance or wait for the connection";
+    if (!split && !mode && payable > 0) return "Choose the payment type";
     if (!customer && due > 0) return "Credit needs a registered customer — pick or add the farmer first";
     if (due > 0 && creditHold) return `Credit is on hold for ${customer?.name} — collect the dues first or ask a manager to lift the hold`;
     if (phone && phone.length !== 10) return "Enter a valid 10-digit mobile number";
     if (split) {
-      if (!parts.length) return "Add a payment line or switch off split payment";
+      if (!parts.length && payable > 0) return "Add a payment line or switch off split payment";
       if (parts.some((p) => n(p.amount) <= 0)) return "Every payment line needs an amount";
-      if (partsTotal > summary.total + 0.004) return `Payments (${inr(partsTotal)}) exceed the bill total`;
+      if (partsTotal > payable + 0.004) return `Payments (${inr(partsTotal)}) exceed ${advanceTotal > 0 ? "what is left after the advance" : "the bill total"}`;
       if (creditNoteUsed > 0 && !customer) return "A credit note needs a registered customer";
       if (creditNoteUsed > availableCredit + 0.004) return `Only ${inr(availableCredit)} of credit note is available for ${customer?.name}`;
     }
@@ -594,9 +666,11 @@ export default function PosPage() {
       paid: paidAmount,
       paymentMode: split ? "Split" : mode ? modeLabel(mode) : "",
       payments: split ? parts.map((p) => ({ mode: modeLabel(p.mode), amount: n(p.amount), reference: p.reference.trim() || null })) : undefined,
+      // (bills with an advance are never made offline)
       notes: notes.trim() || null,
       govtReceiptNo: govtReceipt.trim() || null,
       provisional: true,
+      branchId: current?.id ?? null,
     };
   }
 
@@ -633,6 +707,15 @@ export default function PosPage() {
     toast.success("No connection — bill saved on this device; it will sync automatically");
   }
 
+  /** Split lines, plus each advance used; with an advance the single mode becomes one line for what is left */
+  function payLines() {
+    const adv = usedAdvances.map((a) => ({ mode: "ADVANCE" as PaymentMode, amount: a.amount, bookingId: a.booking.id }));
+    if (split) return [...adv, ...parts.map((p) => ({ mode: p.mode, amount: n(p.amount), reference: p.reference.trim() || undefined }))];
+    if (!adv.length) return undefined;
+    const rest = round2(Math.min(receivedAmt, payable));
+    return mode && mode !== "CREDIT" && rest > 0 ? [...adv, { mode, amount: rest, reference: reference.trim() || undefined }] : adv;
+  }
+
   async function submit(allowOverCreditLimit = false, approvalId?: string) {
     const problem = validate();
     if (problem) {
@@ -661,9 +744,9 @@ export default function PosPage() {
       }),
       discount: summary.discount || undefined,
       paidAmount,
-      paymentMode: split || !mode ? undefined : mode,
+      paymentMode: split || !mode || advanceTotal > 0 ? undefined : mode,
       paymentReference: split ? undefined : reference.trim() || undefined,
-      payments: split ? parts.map((p) => ({ mode: p.mode, amount: n(p.amount), reference: p.reference.trim() || undefined })) : undefined,
+      payments: payLines(),
       isInterState: interState,
       allowOverCreditLimit: allowOverCreditLimit || undefined,
       notes: notes.trim() || undefined,
@@ -685,6 +768,10 @@ export default function PosPage() {
       setCartOpen(false);
       setDone({ sale, receipt: receiptFromSale(sale), queued: false });
       void catalogue.reload();
+      if (usedAdvances.length) {
+        void bookedQ.reload();
+        void bookingsQ.reload();
+      }
       if (vanTripId) void vanQ.reload();
     } catch (e) {
       if (isNetworkError(e)) {
@@ -719,6 +806,8 @@ export default function PosPage() {
     setMode("");
     setSplit(false);
     setParts([]);
+    setSkipAdvance([]);
+    setUseLeftover([]);
     setInterState(false);
     setGovtReceipt("");
     setAadhaar(false);
@@ -1219,6 +1308,33 @@ export default function PosPage() {
                   )}
                 </p>
               )}
+              {customer && bookings.length > 0 && (
+                <div className="space-y-1.5 rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-900">
+                  <p className="font-semibold">
+                    Advance bookings · {inr(bookings.reduce((s, b) => s + b.unused, 0))} advance held
+                  </p>
+                  {advances.length === 0 && (
+                    <p>
+                      {bookings
+                        .filter((b) => b.items.some((i) => i.remaining > 0))
+                        .map((b) => `${b.bookingNo}: ${b.items.filter((i) => i.remaining > 0).map((i) => `${i.product.name} × ${qty(i.remaining)}`).join(", ")}`)
+                        .join(" · ") || "Only leftover advance"}
+                      {lines.length > 0 ? " — not on this bill" : " — add the booked product to use the advance"}
+                    </p>
+                  )}
+                  {advances.map((a) => (
+                    <label key={a.booking.id} className="flex cursor-pointer items-start gap-2">
+                      <input type="checkbox" className="mt-0.5" checked={a.applied} onChange={() => toggleAdvance(a)} />
+                      <span className="min-w-0 flex-1">
+                        <b>{a.booking.bookingNo}</b> · {a.units}
+                        <span className="text-sky-700"> (held {inr(a.booking.unused)})</span>
+                      </span>
+                      <b className="num shrink-0">{a.applied ? `− ${inr(a.amount)}` : "not used"}</b>
+                    </label>
+                  ))}
+                  {!online && advanceTotal > 0 && <p className="font-semibold text-rust-600">Needs internet to set the advance against the bill.</p>}
+                </div>
+              )}
               {customer && creditHold && (
                 <p className="flex items-start gap-1 rounded-lg bg-rust-100 px-2.5 py-1.5 text-xs font-semibold text-rust-600">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> Credit is on hold for this customer — cash, UPI or card only.
@@ -1320,6 +1436,16 @@ export default function PosPage() {
                               .filter(Boolean)
                               .join(" · ")}
                           </span>
+                          {(() => {
+                            const others = bookedByOthers(l.product.id);
+                            if (others <= 0 || inCart(l.product.id) <= sellableOf(l.product) - others) return null;
+                            return (
+                              <span className="mt-1 block rounded bg-ochre-100 px-1.5 py-1 text-[11px] leading-snug text-ochre-800">
+                                {qty(others)} {l.product.unit} booked by another customer (advance taken). You can still sell it — their booking will wait for the next stock.
+                                {!customer && " If this customer is the one who booked it, pick them so the advance is used."}
+                              </span>
+                            );
+                          })()}
                           {!l.product.trackSerial && (
                             <Select
                               value={l.batchId}
@@ -1488,6 +1614,18 @@ export default function PosPage() {
                     <dt className="font-semibold text-ink">Total</dt>
                     <dd className="num font-display text-2xl font-bold text-ink">{inr(summary.total)}</dd>
                   </div>
+                  {advanceTotal > 0 && (
+                    <>
+                      <div className="flex justify-between font-medium text-sky-700">
+                        <dt>Advance Adjusted</dt>
+                        <dd className="num">− {inr(advanceTotal)}</dd>
+                      </div>
+                      <div className="flex items-baseline justify-between">
+                        <dt className="font-semibold text-ink">To Pay Now</dt>
+                        <dd className="num text-lg font-bold text-ink">{inr(payable)}</dd>
+                      </div>
+                    </>
+                  )}
                 </dl>
               </section>
             )}
@@ -1549,8 +1687,8 @@ export default function PosPage() {
                     <button type="button" onClick={addPart} className="font-semibold text-brand-700 hover:underline">
                       + Add payment line
                     </button>
-                    <span className={cx("num font-semibold", partsTotal > summary.total + 0.004 ? "text-red-600" : due > 0 ? "text-ochre-600" : "text-brand-700")}>
-                      {partsTotal > summary.total + 0.004 ? `Over by ${inr(partsTotal - summary.total)}` : due > 0 ? `${inr(due)} left${customer ? " → added to dues" : " (needs a customer)"}` : "Fully paid"}
+                    <span className={cx("num font-semibold", partsTotal > payable + 0.004 ? "text-red-600" : due > 0 ? "text-ochre-600" : "text-brand-700")}>
+                      {partsTotal > payable + 0.004 ? `Over by ${inr(partsTotal - payable)}` : due > 0 ? `${inr(due)} left${customer ? " → added to dues" : " (needs a customer)"}` : "Fully paid"}
                     </span>
                   </div>
                 </div>

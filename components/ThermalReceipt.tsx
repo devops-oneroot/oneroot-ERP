@@ -3,6 +3,7 @@
 import { date, dateTime, inr, n, qty } from "@/lib/format";
 import type { Sale, StoreSettings } from "@/lib/types";
 import { modeLabel } from "@/lib/types";
+import { letterhead } from "@/lib/letterhead";
 import { PrintLogo } from "./ui";
 
 export interface ReceiptLine {
@@ -37,6 +38,8 @@ export interface ReceiptData {
   govtReceiptNo?: string | null;
   /** Bill made offline and not yet numbered by the server */
   provisional?: boolean;
+  /** Branch that made the bill (marked among the addresses) */
+  branchId?: string | null;
   cancelled?: boolean;
 }
 
@@ -68,6 +71,7 @@ export function receiptFromSale(sale: Sale): ReceiptData {
     notes: sale.notes,
     govtReceiptNo: sale.govtReceiptNo ?? null,
     cancelled: sale.status === "CANCELLED",
+    branchId: sale.branchId ?? null,
   };
 }
 
@@ -106,7 +110,20 @@ export function ThermalReceipt({ data, settings, width = 80 }: { data: ReceiptDa
           imageClassName={narrow ? "h-auto w-[22mm]" : "h-auto w-[28mm]"}
         />
         <p className="text-[13px] font-bold uppercase">{settings?.storeName ?? "OneRoot Agri Inputs"}</p>
-        {settings?.address && <p>{[settings.address, settings.city].filter(Boolean).join(", ")}</p>}
+        {(() => {
+          // Every branch address (head office, warehouse, mall); without branch data, the store address as before
+          const addresses = letterhead(settings);
+          if (!addresses.length) return settings?.address ? <p>{[settings.address, settings.city].filter(Boolean).join(", ")}</p> : null;
+          return addresses.map((a) => (
+            <p key={a.branchId ?? a.label} className="mt-0.5 text-[9px] leading-tight">
+              <b>
+                {a.label}
+                {d.branchId && a.branchId === d.branchId ? " (billed here)" : ""}:
+              </b>{" "}
+              {a.address}
+            </p>
+          ));
+        })()}
         {settings?.phone && <p>Ph: {settings.phone}</p>}
         {settings?.gstin && <p>GSTIN: {settings.gstin}</p>}
         {[settings?.fertilizerLicenseNo && `FL ${settings.fertilizerLicenseNo}`, settings?.pesticideLicenseNo && `PL ${settings.pesticideLicenseNo}`, settings?.seedLicenseNo && `SL ${settings.seedLicenseNo}`]

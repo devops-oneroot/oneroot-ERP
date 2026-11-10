@@ -1,10 +1,11 @@
 import type { Attributes, FieldDef } from "./attributes";
+import type { LetterheadBranch } from "./letterhead";
 // Shapes returned by the OneRoot API. Prisma Decimal fields arrive as strings — wrap with n() before math.
 
 export type Dec = string | number;
 export type Role = "ADMIN" | "MANAGER" | "CASHIER" | "ACCOUNTANT";
 export type ProductType = "SEED" | "FERTILIZER" | "PESTICIDE" | "EQUIPMENT" | "OTHER";
-export type PaymentMode = "CASH" | "UPI" | "CARD" | "BANK" | "CHEQUE" | "CREDIT" | "KCC" | "CREDIT_NOTE";
+export type PaymentMode = "CASH" | "UPI" | "CARD" | "BANK" | "CHEQUE" | "CREDIT" | "KCC" | "CREDIT_NOTE" | "ADVANCE";
 export type PaymentStatus = "PAID" | "PARTIAL" | "UNPAID";
 export type DocStatus = "COMPLETED" | "CANCELLED";
 export type PoStatus =
@@ -382,6 +383,8 @@ export interface StoreSettings {
   requireOpenShift: boolean;
   /** WhatsApp Cloud API keys are present on the server */
   whatsappConfigured?: boolean;
+  /** Active branches and their addresses, printed on invoices (see lib/letterhead.ts) */
+  branches?: LetterheadBranch[];
 }
 
 // ───────────────────────── Cash control ─────────────────────────
@@ -627,6 +630,8 @@ export interface Customer {
   overdue?: Overdue;
   /** Credit notes not yet applied to a bill (detail only) — usable as a payment mode */
   creditNoteBalance?: number;
+  /** Advance held on the customer's bookings, not yet set against a bill (detail only) */
+  advanceBalance?: number;
   lastReminder?: CustomerReminder | null;
 }
 
@@ -711,6 +716,57 @@ export interface Payment {
   po?: { id: string; poNo: string } | null;
   /** Paid for the goods on this GRN */
   grn?: { id: string; grnNo: string } | null;
+  /** Advance booking the money was taken for, set against a bill from, or refunded on */
+  bookingId?: string | null;
+  booking?: { id: string; bookingNo: string } | null;
+}
+
+// ───────────────────────── Advance bookings ─────────────────────────
+
+export type BookingStatus = "OPEN" | "PARTIAL" | "FULFILLED" | "CANCELLED";
+
+export const BOOKING_STATUS_LABEL: Record<BookingStatus, string> = {
+  OPEN: "Open",
+  PARTIAL: "Part Delivered",
+  FULFILLED: "Delivered",
+  CANCELLED: "Cancelled",
+};
+
+export interface AdvanceBookingItem {
+  id: string;
+  productId: string;
+  product: { id: string; name: string; sku: string; unit: string; trackSerial: boolean; salePrice: Dec };
+  quantity: Dec;
+  deliveredQty: Dec;
+  /** Units still to deliver */
+  remaining: number;
+  agreedPrice?: Dec | null;
+  /** Detail only: the bill lines that delivered it */
+  saleItems?: { id: string; bookingQty: Dec; sale: { id: string; invoiceNo: string; saleDate: string }; serials: { serialNo: string }[] }[];
+}
+
+/** A customer's product booking with an advance; units can come from any later batch */
+export interface AdvanceBooking {
+  id: string;
+  bookingNo: string;
+  customerId: string;
+  customer: { id: string; name: string; phone?: string | null; village?: string | null; balance?: Dec };
+  branch?: { id: string; code: string; name: string } | null;
+  user?: { name: string } | null;
+  bookingDate: string;
+  expectedDate?: string | null;
+  status: BookingStatus;
+  advancePaid: Dec;
+  advanceUsed: Dec;
+  refunded: Dec;
+  /** Advance still held: paid − used − refunded */
+  unused: number;
+  notes?: string | null;
+  cancelReason?: string | null;
+  cancelledAt?: string | null;
+  items: AdvanceBookingItem[];
+  /** Detail only */
+  payments?: (Payment & { user?: { name: string } | null })[];
 }
 
 export type SerialStatus = "IN_STOCK" | "SOLD";
@@ -778,6 +834,8 @@ export interface SaleReturn {
 export interface Sale {
   id: string;
   invoiceNo: string;
+  /** Branch that made the bill */
+  branchId?: string | null;
   customerId?: string | null;
   customer?: Customer | null;
   customerName?: string | null;
@@ -1451,6 +1509,7 @@ export const MODE_LABEL: Record<PaymentMode, string> = {
   CHEQUE: "Cheque",
   CREDIT: "Credit",
   CREDIT_NOTE: "Credit Note",
+  ADVANCE: "Advance",
 };
 export const modeLabel = (m: PaymentMode | string) => MODE_LABEL[m as PaymentMode] ?? m;
 /** Modes money actually arrives in (for receipts and vendor payments) */

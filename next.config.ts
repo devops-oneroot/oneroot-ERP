@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Let other devices on the LAN load dev JS/HMR (otherwise the page never hydrates)
-  allowedDevOrigins: ["192.168.88.23", "oneroot-erp-backend-d48g.onrender.com"],
+  allowedDevOrigins: ["192.168.*.*", "oneroot-erp-backend-d48g.onrender.com"],
   experimental: {
     agentFeedback: true,
     // Next.js upgrade agent: security fixes only

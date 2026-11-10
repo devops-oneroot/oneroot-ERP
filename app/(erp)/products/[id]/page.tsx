@@ -9,6 +9,7 @@ import { BatchDetails } from "@/components/BatchDetails";
 import { BranchCode } from "@/components/BranchNotice";
 import { AttributeList } from "@/components/AttributeFields";
 import { SerialsPanel } from "@/components/SerialsPanel";
+import { BookingsCard } from "@/components/Bookings";
 import { MovementBadge, MovementRef, SignedQty, useSeeCostPrice } from "@/components/StockBits";
 import {
   Badge,
@@ -302,6 +303,10 @@ export default function ProductDetailPage() {
           <SerialsPanel productId={p.id} batches={batches} />
         </div>
       )}
+
+      <div className="mt-4">
+        <BookingsCard productId={p.id} title="Advance Bookings for This Product" />
+      </div>
 
       {canMoves && (
         <Card title="Stock Movement History" className="mt-4" bodyClassName="p-0">

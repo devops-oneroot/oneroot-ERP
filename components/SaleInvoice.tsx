@@ -3,7 +3,8 @@
 import { amountInWords, date, inr, n, qty } from "@/lib/format";
 import type { Sale, StoreSettings } from "@/lib/types";
 import { modeLabel } from "@/lib/types";
-import { PrintHeader, SystemGeneratedNote } from "./ui";
+import { letterhead } from "@/lib/letterhead";
+import { PrintHeader, SystemGeneratedNote, cx } from "./ui";
 
 /** Printable GST tax invoice. Render inside a `.print-area` container. */
 export function SaleInvoice({ sale, settings }: { sale: Sale; settings: StoreSettings | null }) {
@@ -32,6 +33,8 @@ export function SaleInvoice({ sale, settings }: { sale: Sale; settings: StoreSet
     byRate.set(r, cur);
   }
   const rates = [...byRate.entries()].sort((a, b) => a[0] - b[0]);
+  // Head office, warehouse and the mall: every address prints, the billing branch marked
+  const addresses = letterhead(settings);
 
   return (
     <div className="relative bg-surface text-[13px] leading-snug text-slate-900">
@@ -45,7 +48,8 @@ export function SaleInvoice({ sale, settings }: { sale: Sale; settings: StoreSet
 
       {/* Store header */}
       <PrintHeader
-        store={settings}
+        // The addresses print in their own strip below (all branches), not under the name
+        store={settings && addresses.length ? { ...settings, address: null, city: null, state: null, pincode: null } : settings}
         title="Tax Invoice"
         number={sale.invoiceNo}
         status={cancelled ? { label: "Cancelled", tone: "red" } : null}
@@ -58,6 +62,24 @@ export function SaleInvoice({ sale, settings }: { sale: Sale; settings: StoreSet
           </>
         }
       />
+
+      {addresses.length > 0 && (
+        <div className={cx("grid gap-2 border-b border-slate-300 py-2 text-[10.5px] leading-snug", addresses.length >= 3 ? "grid-cols-3" : addresses.length === 2 ? "grid-cols-2" : "grid-cols-1")}>
+          {addresses.map((a) => {
+            const billed = !!sale.branchId && a.branchId === sale.branchId;
+            return (
+              <div key={a.branchId ?? a.label} className={cx("rounded border px-2 py-1", billed ? "border-brand-600 bg-brand-50/60" : "border-slate-200")}>
+                <p className="flex items-center justify-between gap-1 text-[9.5px] font-bold uppercase tracking-wide text-brand-800">
+                  {a.label}
+                  {billed && <span className="rounded bg-brand-700 px-1 py-px text-[8.5px] font-semibold normal-case tracking-normal text-white">Billed from</span>}
+                </p>
+                <p className="text-slate-700">{a.address}</p>
+                {a.phone && <p className="text-slate-500">Ph: {a.phone}</p>}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Bill-to and invoice meta */}
       <div className="grid grid-cols-2 gap-4 border-b border-slate-300 py-3">
@@ -83,10 +105,6 @@ export function SaleInvoice({ sale, settings }: { sale: Sale; settings: StoreSet
               {date(sale.dueDate)}
             </p>
           )}
-          <p>
-            <span className="text-slate-500">Supply: </span>
-            {sale.isInterState ? "Inter-state (IGST)" : "Intra-state (CGST + SGST)"}
-          </p>
           <p>
             <span className="text-slate-500">Payment: </span>
             {sale.payments && sale.payments.length > 1 ? sale.payments.map((p) => `${modeLabel(p.mode)} ${inr(p.amount)}`).join(" + ") : modeLabel(sale.paymentMode)}

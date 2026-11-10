@@ -103,6 +103,8 @@ export default function ProductsPage() {
     sort,
   };
   const { data, error, loading, reload } = useApi<Paged<Product>>("/products", { ...filters, page, pageSize });
+  // Units customers have booked with an advance and not yet bought (open bookings), per product
+  const { data: booked } = useApi<Record<string, number>>("/bookings/booked");
 
   const allColumns = useMemo<ColumnDef<Product>[]>(() => {
     const cols: ColumnDef<Product>[] = [
@@ -186,6 +188,33 @@ export default function ProductsPage() {
         render: (p) => <StockCell p={p} />,
         csv: (p) => n(p.stock),
       },
+      {
+        id: "booked",
+        label: "Booked",
+        right: true,
+        defaultVisible: true,
+        render: (p) =>
+          n(booked?.[p.id]) > 0 ? (
+            <Link href={`/bookings?search=${encodeURIComponent(p.name)}`} className="font-medium text-sky-700 hover:underline" title="Booked by customers with an advance, not yet bought">
+              {qty(booked![p.id])}
+            </Link>
+          ) : (
+            dash(null)
+          ),
+        csv: (p) => n(booked?.[p.id]),
+      },
+      {
+        id: "free",
+        label: "Free to Sell",
+        right: true,
+        render: (p) => {
+          const b = n(booked?.[p.id]);
+          if (b <= 0) return dash(null);
+          const free = n(p.stock) - b;
+          return <span className={free < 0 ? "font-semibold text-red-600" : "font-medium"} title={free < 0 ? `${qty(-free)} more booked than in stock — order more` : undefined}>{qty(free)}</span>;
+        },
+        csv: (p) => n(p.stock) - n(booked?.[p.id]),
+      },
       { id: "reorderLevel", label: "Reorder Level", right: true, render: (p) => (n(p.reorderLevel) ? qty(p.reorderLevel) : dash(null)), csv: (p) => n(p.reorderLevel) },
     );
     if (showCost) {
@@ -212,7 +241,7 @@ export default function ProductsPage() {
       },
     );
     return cols;
-  }, [showCost, branchCode]);
+  }, [showCost, branchCode, booked]);
 
   const cols = useColumns("products", allColumns);
   const colCount = cols.columns.length + 1;

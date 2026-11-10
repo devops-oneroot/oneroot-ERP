@@ -397,7 +397,8 @@ input[type="number"] {
     display: grid !important;
   }
   body[data-print="sheet"] .po-print,
-  body[data-print="sheet"] .grn-print {
+  body[data-print="sheet"] .grn-print,
+  body[data-print="sheet"] .advance-print {
     display: block !important;
   }
 }

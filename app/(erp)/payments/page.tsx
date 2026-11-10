@@ -43,7 +43,12 @@ function partyOf(p: Payment, can: Can) {
 }
 
 function againstOf(p: Payment, can: Can) {
-  if (p.sale) return { label: p.sale.invoiceNo, href: can("sales.view") ? `/sales/${p.sale.id}` : null };
+  // Advance bookings: money taken for one, refunded from one, or one's advance set against a bill
+  if (p.booking && !p.sale) {
+    const label = p.direction === "OUT" ? `Refund · ${p.booking.bookingNo}` : p.mode === "ADVANCE" ? `To account · ${p.booking.bookingNo}` : `Booking · ${p.booking.bookingNo}`;
+    return { label, href: can("bookings.view") ? `/bookings/${p.booking.id}` : null };
+  }
+  if (p.sale) return { label: p.booking ? `${p.sale.invoiceNo} · from ${p.booking.bookingNo}` : p.sale.invoiceNo, href: can("sales.view") ? `/sales/${p.sale.id}` : null };
   // Paid for a GRN's goods / as an advance on a PO: those are what finance paid against
   if (p.grn) return { label: p.grn.grnNo, href: can("grn.view") ? `/goods-inward/${p.grn.id}` : null };
   if (p.po) return { label: `Advance · ${p.po.poNo}`, href: can("purchases.view") ? `/purchase-orders/${p.po.id}` : null };

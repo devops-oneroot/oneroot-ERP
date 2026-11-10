@@ -411,7 +411,7 @@ function EntryModalBody({ id, onClose, onChanged }: { id: string; onClose: () =>
 
   // Only link to a bill the user can open
   const docLink = e?.refId
-    ? e.refType === "SALE" || (e.refType === "REVERSAL" && e.refNo?.includes("INV"))
+    ? e.refType === "SALE" || (e.refType === "REVERSAL" && /^IN[VP]\//.test(e.refNo ?? ""))
       ? can("sales.view") && `/sales/${e.refId}`
       : e.refType === "PURCHASE"
         ? can("invoices.view") && `/purchases/${e.refId}`
