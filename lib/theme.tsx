@@ -7,17 +7,17 @@ export type Theme = "light" | "dark";
 const STORAGE_KEY = "theme";
 
 /**
- * Runs in <head> before the first paint (see app/layout.tsx): the saved choice, else the device setting.
- * A plain string so it works before React loads; keep it in step with `preferred` below.
+ * Runs in <head> before the first paint (see app/layout.tsx): the saved choice, else light — whatever the device or
+ * browser is set to. A plain string so it works before React loads; keep it in step with `preferred` below.
  */
-export const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem("${STORAGE_KEY}");if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.classList.toggle("dark",t==="dark")}catch(e){}})()`;
+export const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem("${STORAGE_KEY}");document.documentElement.classList.toggle("dark",t==="dark")}catch(e){}})()`;
 
+/** The theme picked with the toggle on this device; light until someone picks dark */
 function preferred(): Theme {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved === "light" || saved === "dark") return saved;
+    if (localStorage.getItem(STORAGE_KEY) === "dark") return "dark";
   } catch {}
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return "light";
 }
 
 const apply = (theme: Theme) => document.documentElement.classList.toggle("dark", theme === "dark");

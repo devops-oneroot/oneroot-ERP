@@ -276,14 +276,8 @@ function NavItemLink({
         nested
           ? "text-[12.5px] [&>svg]:size-4"
           : "text-[13.5px] [&>svg]:size-[17px]",
-        active
-          ? cx(
-              "bg-brand-100 font-semibold text-brand-800",
-              nested
-                ? "shadow-[inset_2px_0_0_var(--color-brand-500)]"
-                : "shadow-[inset_3px_0_0_var(--color-brand-500)]",
-            )
-          : "text-slate-700 hover:bg-brand-100 hover:text-brand-800",
+        // Active: the same orange bar on the left for every menu, top-level or inside a section
+        active ? "bg-brand-100 font-semibold text-brand-800 shadow-[inset_3px_0_0_var(--color-brand-500)]" : "text-slate-700 hover:bg-brand-100 hover:text-brand-800",
       )}
     >
       {item.icon}
@@ -402,10 +396,10 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 function Sidebar({ onNavigate, onClose }: { onNavigate?: () => void; onClose?: () => void }) {
   return (
     <div className="flex h-full flex-col border-r border-brand-100 bg-brand-50">
-      <div className="flex items-start gap-2 px-5 pb-4 pt-5">
+      <div className="flex items-center gap-2 px-5 pb-4 pt-5">
         <Link href="/dashboard" onClick={onNavigate} className="block min-w-0 flex-1 items-center" aria-label="OneRoot.farm — dashboard">
           <Logo logo={LOGOS.horizontal} priority className="flex px-4 py-3 shadow-sm ring-1 ring-brand-100" imageClassName="w-[85%]" />
-          <p className="mt-1.5 text-[10.5px] font-medium uppercase tracking-[0.12em] text-brand-700">
+          <p className="mt-1.5 text-center text-[10.5px] font-medium uppercase tracking-[0.12em] text-brand-700">
             Agri Inputs ERP
           </p>
         </Link>
