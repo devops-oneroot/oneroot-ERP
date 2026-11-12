@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, File, FileArchive, FileImage, FileSpreadsheet, FileText, Paperclip, Trash2, Upload, X } from "lucide-react";
+import { Download, File, FileArchive, FileImage, FileSpreadsheet, FileText, Link2, Paperclip, Trash2, Upload, X } from "lucide-react";
 import { useRef, useState, type DragEvent } from "react";
 import { api } from "@/lib/api";
 import { dateTime } from "@/lib/format";
@@ -131,24 +131,41 @@ export function Attachments({
     }
   }
 
+  /** https://erp.oneroot.farm/files/<id>.jpg?exp=…&sig=… — opens without signing in, for 7 days */
+  async function fileLink(a: Attachment) {
+    const { path } = await api.get<{ path: string; expiresAt: string }>(`/attachments/file/${a.id}/link`);
+    return window.location.origin + path;
+  }
+
   async function open(a: Attachment, download: boolean) {
     const viewable = !download && VIEWABLE.has(a.mimeType);
-    // Open the tab now, while the click still counts, then point it at the file once it has loaded
+    // Open the tab now, while the click still counts, then point it at the file once its link is ready
     const tab = viewable ? window.open("", "_blank") : null;
     setBusyId(a.id);
     try {
-      const file = await api.blob(`/attachments/file/${a.id}${viewable ? "" : "?download=1"}`);
-      const url = URL.createObjectURL(viewable ? new Blob([file], { type: a.mimeType }) : file);
+      const url = await fileLink(a);
       if (tab) tab.location.href = url;
       else {
         const link = document.createElement("a");
-        link.href = url;
+        link.href = `${url}&download=1`;
         link.download = a.fileName;
         link.click();
       }
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (e) {
       tab?.close();
+      toast.error(errMsg(e));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function copyLink(a: Attachment) {
+    setBusyId(a.id);
+    try {
+      // Clipboard write with a promise keeps Safari's user-gesture check happy while the link loads
+      await navigator.clipboard.write([new ClipboardItem({ "text/plain": fileLink(a).then((u) => new Blob([u], { type: "text/plain" })) })]);
+      toast.success("Link copied — anyone with it can open the file for 7 days");
+    } catch (e) {
       toast.error(errMsg(e));
     } finally {
       setBusyId(null);
@@ -202,6 +219,9 @@ export function Attachments({
                 <Spinner text={null} />
               ) : (
                 <div className="flex shrink-0 items-center">
+                  <button type="button" onClick={() => void copyLink(a)} className="rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 sm:p-1.5" aria-label={`Copy link to ${a.fileName}`} title="Copy link (works for 7 days)">
+                    <Link2 className="size-4" />
+                  </button>
                   <button type="button" onClick={() => void open(a, true)} className="rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 sm:p-1.5" aria-label={`Download ${a.fileName}`}>
                     <Download className="size-4" />
                   </button>

@@ -13,6 +13,11 @@ const nextConfig: NextConfig = {
       validationLevel: "manual-warning",
     },
   },
+  // Shareable attachment links (https://erp.oneroot.farm/files/<id>.jpg?exp=…&sig=…) are served by the API
+  async rewrites() {
+    const api = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api").replace(/\/+$/, "");
+    return [{ source: "/files/:name", destination: `${api}/attachments/public/:name` }];
+  },
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {
