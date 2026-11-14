@@ -470,6 +470,9 @@ function UserForm({
   const [templateId, setTemplateId] = useState<string | null>(user?.roleTemplateId ?? null);
   const [departmentId, setDepartmentId] = useState(user?.role === "ADMIN" ? "admin" : (user?.roleTemplate?.department?.id ?? ""));
   const [isActive, setIsActive] = useState(user?.isActive ?? true);
+  // Own POS discount ceiling; blank = the role's limit
+  const [maxDiscount, setMaxDiscount] = useState(user?.maxDiscountPct == null ? "" : String(Number(user.maxDiscountPct)));
+  const canSetDiscount = editing && !isSelf && role !== "ADMIN" && can("roles.edit");
   // Branches the user may work in. The first ticked is their home branch
   const [branchIds, setBranchIds] = useState<string[]>(user?.branchIds?.length ? user.branchIds : user?.branchId ? [user.branchId] : []);
   // "All Branches" ticked: saved as an empty branch list
@@ -513,6 +516,8 @@ function UserForm({
     if (!departmentId) return toast.error("Choose the user's department");
     if (departmentId !== "admin" && !templateId) return toast.error("Choose the user's role in the department");
     if (!allBranches && !branchIds.length) return toast.error("Choose the user's branches, or All Branches");
+    const discount = maxDiscount.trim() === "" ? null : Number(maxDiscount);
+    if (canSetDiscount && discount !== null && !(discount >= 0 && discount <= 100)) return toast.error("Max discount must be between 0 and 100%");
     setSaving(true);
     try {
       const access = { role, roleTemplateId: role === "ADMIN" ? null : templateId };
@@ -520,6 +525,7 @@ function UserForm({
         const body: Record<string, unknown> = { name: name.trim(), phone: phone.trim(), designation: designation.trim(), branchIds: allBranches ? [] : branchIds };
         if (!isSelf) Object.assign(body, outranks ? {} : access, { isActive });
         if (password) body.password = password;
+        if (canSetDiscount) body.maxDiscountPct = discount;
         await api.patch(`/users/${user.id}`, body);
         toast.success(password ? "User updated and password reset" : "User updated");
       } else {
@@ -644,6 +650,11 @@ function UserForm({
                   : "Can switch between these branches only; the first ticked is where they start"}
           </p>
         </div>
+        {canSetDiscount && (
+          <Field label="Max POS Discount %" hint="For this person only. Blank = their role's limit; above it needs a manager's approval">
+            <Input type="number" min="0" max="100" step="0.5" value={maxDiscount} onChange={(e) => setMaxDiscount(e.target.value)} placeholder="Role's limit" className="num" />
+          </Field>
+        )}
         {!isSelf && (
           <Field label="Status" required hint="Only active users can sign in">
             <Select value={isActive ? "active" : "inactive"} onChange={(e) => setIsActive(e.target.value === "active")} aria-label="Status">

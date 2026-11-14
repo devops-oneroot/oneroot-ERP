@@ -111,6 +111,8 @@ export interface User {
   /** Custom role (named set of ticks) the user was given, if any */
   roleTemplateId?: string | null;
   roleTemplate?: { id: string; name: string; baseRole?: Role; level?: RoleLevel; department?: { id: string; code?: string; name: string } | null } | null;
+  /** This person's own POS discount ceiling in %; null = their role's limit */
+  maxDiscountPct?: Dec | null;
   isActive: boolean;
   lastLoginAt?: string | null;
   createdAt: string;
