@@ -66,8 +66,9 @@ type Tab = "ledger" | "branches" | "products" | "purchases" | "payments" | "port
 export default function VendorDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { can, isAdmin } = useAuth();
+  const { can } = useAuth();
   const canBuy = can("po.create");
+  const canPortal = can("vendors.portal");
   const canSeePurchases = can("purchases.view");
   const canSeePayments = can("payments.view");
   const [tab, setTab] = useState<Tab>("ledger");
@@ -202,8 +203,8 @@ export default function VendorDetailPage() {
           { value: "products", label: "Products Supplied" },
           ...(canSeePurchases ? [{ value: "purchases" as Tab, label: `Purchases (${v.stats.billCount})` }] : []),
           ...(canSeePayments ? [{ value: "payments" as Tab, label: "Payments" }] : []),
-          // Supplier sign-ins are given by administrators only (the API checks this too)
-          ...(isAdmin ? [{ value: "portal" as Tab, label: "Supplier Portal" }] : []),
+          // Supplier sign-ins: administrators and roles with the Supplier Portal permission (the API checks this too)
+          ...(canPortal ? [{ value: "portal" as Tab, label: "Supplier Portal" }] : []),
         ]}
       />
 
@@ -212,7 +213,7 @@ export default function VendorDetailPage() {
       {tab === "products" && <VendorProducts vendor={v} canEdit={can("vendors.edit")} />}
       {tab === "purchases" && canSeePurchases && <VendorPurchases vendorId={v.id} />}
       {tab === "payments" && canSeePayments && <VendorPayments key={ledgerKey} vendorId={v.id} linkPurchases={canSeePurchases} />}
-      {tab === "portal" && isAdmin && <VendorPortalUsers vendor={v} />}
+      {tab === "portal" && canPortal && <VendorPortalUsers vendor={v} />}
 
       <LazyVendorForm
         open={editOpen}

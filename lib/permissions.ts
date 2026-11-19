@@ -38,6 +38,8 @@ export const PERMISSIONS = [
   { key: 'vendors.create', section: 'Purchases', module: 'Vendors & Agents', action: 'create', label: 'Add vendors and agents', roles: ['MANAGER', 'ACCOUNTANT'] },
   { key: 'vendors.edit', section: 'Purchases', module: 'Vendors & Agents', action: 'edit', label: 'Edit vendors and agents', roles: ['MANAGER', 'ACCOUNTANT'] },
   { key: 'vendors.delete', section: 'Purchases', module: 'Vendors & Agents', action: 'delete', label: 'Delete vendors and agents', roles: ['MANAGER'] },
+  // No role gets this by default: tick it on the department role of whoever looks after supplier logins
+  { key: 'vendors.portal', section: 'Purchases', module: 'Vendors & Agents', action: 'other', label: 'Supplier Portal: add, disable and reset supplier sign-ins', roles: [] },
   { key: 'purchases.view', section: 'Purchases', module: 'Purchase Orders', action: 'view', label: 'Purchase orders', roles: ['MANAGER', 'ACCOUNTANT'] },
   { key: 'po.create', section: 'Purchases', module: 'Purchase Orders', action: 'create', label: 'Raise purchase orders', roles: ['MANAGER', 'ACCOUNTANT'] },
   { key: 'po.edit', section: 'Purchases', module: 'Purchase Orders', action: 'edit', label: 'Edit purchase orders', roles: ['MANAGER', 'ACCOUNTANT'] },
