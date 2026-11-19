@@ -21,6 +21,7 @@ import { useMemo, useState } from "react";
 import { PartyPaymentForm, modeLabel, type FixedParty } from "@/components/PartyPaymentForm";
 import { ProductPicker } from "@/components/pickers";
 import { VendorBranchList } from "@/components/VendorBranches";
+import { VendorPortalUsers } from "@/components/VendorPortalUsers";
 import {
   Badge,
   Button,
@@ -60,12 +61,12 @@ type VendorDetail = Vendor & {
   // >[];
 };
 
-type Tab = "ledger" | "branches" | "products" | "purchases" | "payments";
+type Tab = "ledger" | "branches" | "products" | "purchases" | "payments" | "portal";
 
 export default function VendorDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { can } = useAuth();
+  const { can, isAdmin } = useAuth();
   const canBuy = can("po.create");
   const canSeePurchases = can("purchases.view");
   const canSeePayments = can("payments.view");
@@ -201,6 +202,8 @@ export default function VendorDetailPage() {
           { value: "products", label: "Products Supplied" },
           ...(canSeePurchases ? [{ value: "purchases" as Tab, label: `Purchases (${v.stats.billCount})` }] : []),
           ...(canSeePayments ? [{ value: "payments" as Tab, label: "Payments" }] : []),
+          // Supplier sign-ins are given by administrators only (the API checks this too)
+          ...(isAdmin ? [{ value: "portal" as Tab, label: "Supplier Portal" }] : []),
         ]}
       />
 
@@ -209,6 +212,7 @@ export default function VendorDetailPage() {
       {tab === "products" && <VendorProducts vendor={v} canEdit={can("vendors.edit")} />}
       {tab === "purchases" && canSeePurchases && <VendorPurchases vendorId={v.id} />}
       {tab === "payments" && canSeePayments && <VendorPayments key={ledgerKey} vendorId={v.id} linkPurchases={canSeePurchases} />}
+      {tab === "portal" && isAdmin && <VendorPortalUsers vendor={v} />}
 
       <LazyVendorForm
         open={editOpen}

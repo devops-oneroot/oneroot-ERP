@@ -47,10 +47,29 @@ export interface SessionUser {
   roleTemplate?: { name: string } | null;
 }
 
+/** A supplier portal sign-in: sees only their own stock (/supplier); never a staff user */
+export interface SupplierSession {
+  kind: "vendor";
+  id: string;
+  name: string;
+  email: string;
+  vendorName: string;
+}
+
+type MeResponse = SessionUser | SupplierSession;
+const isSupplier = (u: MeResponse | null | undefined): u is SupplierSession => !!u && "kind" in u && u.kind === "vendor";
+
+/** Where each kind of session starts */
+export const homeFor = (supplier: SupplierSession | null) => (supplier ? "/supplier" : "/dashboard");
+
 interface AuthState {
+  /** Staff user; always null for a supplier session, so no ERP page treats a supplier as staff */
   user: SessionUser | null;
+  /** Supplier portal session, when the person signed in is a supplier */
+  supplier: SupplierSession | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  /** Signs in and says which kind of account it was */
+  login: (email: string, password: string) => Promise<"staff" | "vendor">;
   logout: () => void;
   /** True when the user holds any of these permissions (administrators always do) */
   can: (...perms: Permission[]) => boolean;
@@ -62,45 +81,67 @@ const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [supplier, setSupplier] = useState<SupplierSession | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const apply = useCallback((u: MeResponse | null) => {
+    if (isSupplier(u)) {
+      setSupplier(u);
+      setUser(null);
+    } else {
+      setSupplier(null);
+      setUser(u);
+    }
+  }, []);
 
   useEffect(() => {
     // Restore the session from a saved token, if any
-    const restore = getToken() ? api.get<SessionUser>("/auth/me") : Promise.resolve(null);
+    const restore = getToken() ? api.get<MeResponse>("/auth/me") : Promise.resolve(null);
     restore
       .then((u) => {
-        setUser(u);
-        if (u) persistSet("/auth/me", u);
+        apply(u);
+        // Only staff sessions are kept for offline use (the POS); a supplier session always asks the server
+        if (u && !isSupplier(u)) persistSet("/auth/me", u);
       })
       .catch((e) => {
-        // No network: keep the last known session so the POS can keep billing offline
+        // No network: keep the last known staff session so the POS can keep billing offline
         const saved = isNetworkError(e) ? persistGet<SessionUser>("/auth/me") : null;
-        if (saved) setUser(saved);
+        if (saved && !isSupplier(saved)) setUser(saved);
         else setToken(null);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [apply]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const res = await api.post<{ token: string; user: SessionUser }>("/auth/login", { email, password });
-    clearApiCache();
-    setToken(res.token);
-    persistSet("/auth/me", res.user);
-    setUser(res.user);
-  }, []);
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const res = await api.post<{ token: string; user: MeResponse }>("/auth/login", { email, password });
+      clearApiCache();
+      setToken(res.token);
+      if (!isSupplier(res.user)) persistSet("/auth/me", res.user);
+      apply(res.user);
+      return isSupplier(res.user) ? ("vendor" as const) : ("staff" as const);
+    },
+    [apply],
+  );
 
   const logout = useCallback(() => {
-    setToken(null);
-    persistClear();
-    clearSavedBills();
-    setUser(null);
-    window.location.href = "/login";
-  }, []);
+    const finish = () => {
+      setToken(null);
+      persistClear();
+      clearSavedBills();
+      setUser(null);
+      setSupplier(null);
+      window.location.href = "/login";
+    };
+    // A supplier session is also ended on the server, so the token can't be used again
+    if (supplier) postAuth("/vendor-portal/logout", {}).catch(() => {}).finally(finish);
+    else finish();
+  }, [supplier]);
 
   const can = useCallback((...perms: Permission[]) => hasPerm(user, ...perms), [user]);
   const isAdmin = !!user && user.role === "ADMIN";
 
-  return <AuthContext.Provider value={{ user, loading, login, logout, can, isAdmin }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, supplier, loading, login, logout, can, isAdmin }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

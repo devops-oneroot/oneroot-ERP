@@ -422,7 +422,7 @@ function Sidebar({ onNavigate, onClose }: { onNavigate?: () => void; onClose?: (
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, supplier, loading } = useAuth();
   const router = useRouter();
 
   const [drawer, setDrawer] = useState(false);
@@ -432,8 +432,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!loading && !user) router.replace("/login");
-  }, [loading, user, router]);
+    // A supplier never sees the ERP (the API refuses them anyway): straight to their stock page
+    if (!loading && supplier) router.replace("/supplier");
+    else if (!loading && !user) router.replace("/login");
+  }, [loading, user, supplier, router]);
 
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0 });

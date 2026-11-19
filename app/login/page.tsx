@@ -3,10 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button, Field, Input, LOGOS, errMsg, Logo } from "@/components/ui";
-import { useAuth } from "@/lib/auth";
+import { homeFor, useAuth } from "@/lib/auth";
 
 export default function LoginPage() {
-  const { login, user, loading } = useAuth();
+  const { login, user, supplier, loading } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -14,16 +14,17 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!loading && user) router.replace("/dashboard");
-  }, [loading, user, router]);
+    if (!loading && (user || supplier)) router.replace(homeFor(supplier));
+  }, [loading, user, supplier, router]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await login(email.trim(), password);
-      router.replace("/dashboard");
+      // Staff go to the ERP, suppliers to their stock page
+      const kind = await login(email.trim(), password);
+      router.replace(kind === "vendor" ? "/supplier" : "/dashboard");
     } catch (err) {
       setError(errMsg(err));
     } finally {
@@ -59,7 +60,7 @@ export default function LoginPage() {
           <div className="px-5 py-4 sm:px-6">
             <div className="mb-2 text-center">
               <h1 className="text-lg font-semibold text-slate-900">Sign In</h1>
-              <p className="text-xs text-slate-500">Use your store account</p>
+              <p className="text-xs text-slate-500">Use your store or supplier account</p>
             </div>
             <div className="space-y-4">
               <Field label="Email">
