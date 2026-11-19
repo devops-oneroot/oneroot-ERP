@@ -96,8 +96,8 @@ export function PoForm({ po, presetVendorId }: { po?: PurchaseOrder; presetVendo
   const [orderDate, setOrderDate] = useState(po ? today(new Date(po.orderDate)) : today());
   const [expectedDate, setExpectedDate] = useState(po?.expectedDate ? today(new Date(po.expectedDate)) : "");
   const [expiryDays, setExpiryDays] = useState(po?.expiryDays ? String(po.expiryDays) : "");
-  // Expected delivery is fixed once the PO is created (older POs without one may set it once)
-  const expectedLocked = !!po?.expectedDate;
+  // Expected delivery stays editable while the PO is a draft; fixed once submitted (older POs without one may set it once)
+  const expectedLocked = !!po?.expectedDate && po.status !== "DRAFT";
   const [lines, setLines] = useState<PoLine[]>(() =>
     // Negative keys for loaded lines so they never clash with lines added later
     (po?.items ?? []).map((i, idx) => ({
