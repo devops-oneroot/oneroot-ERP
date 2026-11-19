@@ -995,6 +995,8 @@ export interface PurchaseOrder {
   expectedDate?: string | null;
   /** How many days the PO stays valid (7 or 14); null on older POs */
   expiryDays?: number | null;
+  /** Last valid day (from final approval once approved); sent with a single PO */
+  validUntil?: string | null;
   /** Freight and other charges, already included in totalAmount */
   transportCharges?: Dec;
   /** GST % on the transportation / other charges (18 by default) */

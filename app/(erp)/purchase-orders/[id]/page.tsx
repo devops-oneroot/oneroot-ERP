@@ -1064,7 +1064,11 @@ function PoPrint({ po, store, notApproved }: { po: PurchaseOrder; store: StoreSe
   const igst = po.isInterState ?? isInterState(supplier, store);
   const tax = n(po.taxAmount);
   const slabs = poGstSlabs(po);
-  const validUntil = po.expiryDays ? new Date(new Date(po.orderDate).getTime() + po.expiryDays * 86_400_000) : null;
+  const validUntil = po.validUntil
+    ? new Date(po.validUntil)
+    : po.expiryDays
+      ? new Date(new Date(po.orderDate).getTime() + po.expiryDays * 86_400_000)
+      : null;
   const join = (...parts: (string | null | undefined)[]) => parts.filter(Boolean).join(", ");
   // Items only, incl. their GST (the PO's GST also covers the charges)
   const itemsTotal = round2(items.reduce((s, it) => s + n(it.amount), 0));
