@@ -2,6 +2,7 @@
 
 import {
   BadgeCheck,
+  Gift,
   TrendingUp,
   Bell,
   BellRing,
@@ -96,6 +97,12 @@ export const NAV: NavGroup[] = [
       { href: "/products", label: "Products", icon: <Package />, perms: ["products.view"] },
       { href: "/inventory", label: "Stock & Batches", icon: <RotateCcw />, perms: ["inventory.view"] },
       { href: "/inventory/govt-match", label: "Govt Fertiliser Match", icon: <ShieldCheck />, perms: ["inventory.govt"] },
+      {
+        href: "/marketing",
+        label: "Marketing Materials",
+        icon: <Gift />,
+        perms: ["marketing.view", "marketing.create", "marketing.edit", "marketing.issue", "marketing.transfer"],
+      },
     ],
   },
 

@@ -69,6 +69,12 @@ export const PERMISSIONS = [
   { key: 'inventory.adjust', section: 'Inventory', module: 'Stock & Batches', action: 'other', label: 'Adjust / Write Off', roles: ['MANAGER'] },
   { key: 'inventory.transfer', section: 'Inventory', module: 'Stock & Batches', action: 'other', label: 'Transfer', roles: ['MANAGER'] },
   { key: 'inventory.govt', section: 'Inventory', module: 'Stock & Batches', action: 'other', label: 'Govt Stock Match', roles: ['MANAGER'] },
+  // Marketing materials (given away, never sold): no role gets these by default — tick them on the roles that need them
+  { key: 'marketing.view', section: 'Inventory', module: 'Marketing Materials', action: 'view', label: 'Marketing materials: stock and history', roles: [] },
+  { key: 'marketing.create', section: 'Inventory', module: 'Marketing Materials', action: 'create', label: 'Unpack kits and add marketing materials', roles: [] },
+  { key: 'marketing.edit', section: 'Inventory', module: 'Marketing Materials', action: 'edit', label: 'Rename items and correct counts', roles: [] },
+  { key: 'marketing.issue', section: 'Inventory', module: 'Marketing Materials', action: 'other', label: 'Give out', roles: [] },
+  { key: 'marketing.transfer', section: 'Inventory', module: 'Marketing Materials', action: 'other', label: 'Move between branches', roles: [] },
   // Finance
   { key: 'cash.view', section: 'Finance', module: 'Cash & Shifts', action: 'view', label: 'View cash & shifts — not in use yet', roles: [], planned: true },
   { key: 'cash.create', section: 'Finance', module: 'Cash & Shifts', action: 'create', label: 'Add cash & shifts — not in use yet', roles: [], planned: true },
