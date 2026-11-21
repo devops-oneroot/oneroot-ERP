@@ -33,6 +33,7 @@ import { CfFarmerPicker, CustomerPicker } from "@/components/pickers";
 import { PrintPortal } from "@/components/PrintPortal";
 import { SerialSelect } from "@/components/SerialPicker";
 import { ThermalReceipt, receiptFromSale, type ReceiptData } from "@/components/ThermalReceipt";
+import { PinelabsPayModal, terminalPaymentText, type TerminalPayment } from "@/components/PinelabsPay";
 import { Button, Checkbox, Dropdown, Input, Modal, Select, Spinner, Table, Td, Textarea, Th, cx, errMsg, useConfirm, useToast, type DropdownOption } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -195,6 +196,12 @@ export default function PosPage() {
   const [mode, setMode] = useState<PaymentMode | "">("");
   const [received, setReceived] = useState<string | null>(null);
   const [reference, setReference] = useState("");
+  // Pine Labs card / UPI terminal (when the server has it set up for this branch)
+  const terminalSettings = useApi<{ enabled: boolean; autoCancelMinutes: number }>(online && !needBranch.blocked ? "/pinelabs/settings" : null);
+  const [useTerminal, setUseTerminal] = useState(true);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  // Approved on the terminal but not billed yet (a save that failed is retried against the same payment)
+  const [terminalPaid, setTerminalPaid] = useState<TerminalPayment | null>(null);
   // Split payment: several modes on one bill (cash + UPI, credit note + cash…)
   const [split, setSplit] = useState(false);
   const [parts, setParts] = useState<Part[]>([]);
@@ -549,6 +556,9 @@ export default function PosPage() {
   const partsTotal = round2(parts.reduce((s, p) => s + n(p.amount), 0));
   const change = !split && mode === "CASH" ? round2(receivedAmt - payable) : 0;
   const paidAmount = round2(Math.min(split ? partsTotal : receivedAmt, payable) + advanceTotal);
+  // Card / UPI taken on the Pine Labs terminal: the single mode's amount (after any advance)
+  const terminalOn = !!terminalSettings.data?.enabled && useTerminal && online && !split && (mode === "CARD" || mode === "UPI");
+  const terminalAmount = round2(Math.min(receivedAmt, payable));
   const due = round2(summary.total - paidAmount);
   // Credit notes the customer still holds (from the customer detail; applied as a payment mode)
   const availableCredit = round2(n(credit?.creditNoteBalance));
@@ -708,19 +718,32 @@ export default function PosPage() {
   }
 
   /** Split lines, plus each advance used; with an advance the single mode becomes one line for what is left */
-  function payLines() {
+  function payLines(terminal: TerminalPayment | null) {
     const adv = usedAdvances.map((a) => ({ mode: "ADVANCE" as PaymentMode, amount: a.amount, bookingId: a.booking.id }));
     if (split) return [...adv, ...parts.map((p) => ({ mode: p.mode, amount: n(p.amount), reference: p.reference.trim() || undefined }))];
     if (!adv.length) return undefined;
     const rest = round2(Math.min(receivedAmt, payable));
-    return mode && mode !== "CREDIT" && rest > 0 ? [...adv, { mode, amount: rest, reference: reference.trim() || undefined }] : adv;
+    return mode && mode !== "CREDIT" && rest > 0
+      ? [...adv, { mode, amount: rest, reference: terminal ? undefined : reference.trim() || undefined, pinelabsTxnId: terminal?.id }]
+      : adv;
   }
 
-  async function submit(allowOverCreditLimit = false, approvalId?: string) {
+  /** `paidNow`: the terminal payment just approved (state updates only on the next render) */
+  async function submit(allowOverCreditLimit = false, approvalId?: string, paidNow?: TerminalPayment) {
     const problem = validate();
     if (problem) {
       toast.error(problem);
       return;
+    }
+    // Card / UPI on the Pine Labs terminal: the customer pays there first, then the bill is saved against that payment
+    const terminal = terminalOn ? (paidNow ?? terminalPaid) : null;
+    if (terminalOn) {
+      if (terminalAmount <= 0) return toast.error("Enter the amount to collect on the terminal");
+      if (!terminal || terminal.amount !== terminalAmount) {
+        if (terminal) toast.error(`${inr(terminal.amount)} was paid on the terminal but the bill now needs ${inr(terminalAmount)} — ask a manager to refund it on the terminal`);
+        setTerminalOpen(true);
+        return;
+      }
     }
     overRef.current = allowOverCreditLimit;
     const body = {
@@ -745,8 +768,9 @@ export default function PosPage() {
       discount: summary.discount || undefined,
       paidAmount,
       paymentMode: split || !mode || advanceTotal > 0 ? undefined : mode,
-      paymentReference: split ? undefined : reference.trim() || undefined,
-      payments: payLines(),
+      paymentReference: split || terminal ? undefined : reference.trim() || undefined,
+      pinelabsTxnId: !split && advanceTotal <= 0 ? terminal?.id : undefined,
+      payments: payLines(terminal),
       isInterState: interState,
       allowOverCreditLimit: allowOverCreditLimit || undefined,
       notes: notes.trim() || undefined,
@@ -763,6 +787,7 @@ export default function PosPage() {
     setSaving(true);
     try {
       const sale = await api.post<Sale>("/sales", body);
+      setTerminalPaid(null);
       setOverLimit(null);
       setNeed(null);
       setCartOpen(false);
@@ -797,6 +822,8 @@ export default function PosPage() {
     setBillDiscount("");
     setReceived(null);
     setReference("");
+    setUseTerminal(true);
+    setTerminalPaid(null);
     setNotes("");
     setAgentId("");
     setWalkinName("");
@@ -1708,10 +1735,25 @@ export default function PosPage() {
                       className="num mt-0.5 h-9 text-right"
                     />
                   </label>
-                  {mode !== "CASH" && mode !== "CREDIT" ? (
+                  {(mode === "CARD" || mode === "UPI") && terminalSettings.data?.enabled && online && useTerminal ? (
+                    <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-2 text-xs text-brand-800">
+                      <input type="checkbox" checked onChange={() => setUseTerminal(false)} className="mt-0.5 size-4 accent-brand-600" />
+                      <span>
+                        <span className="font-semibold">Take payment on Pine Labs terminal</span>
+                        <span className="block text-[11px] text-brand-700/80">
+                          {terminalPaid ? `Paid ${inr(terminalPaid.amount)} · ${terminalPaymentText(terminalPaid)}` : "Card or UPI on the machine — untick to type a reference"}
+                        </span>
+                      </span>
+                    </label>
+                  ) : mode !== "CASH" && mode !== "CREDIT" ? (
                     <label className="text-xs text-muted">
                       {mode === "CHEQUE" ? "Cheque No." : mode === "UPI" ? "UPI Ref / UTR" : mode === "KCC" ? "KCC Card / Txn No." : "Reference"}
                       <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Optional" className="mt-0.5 h-9" />
+                      {(mode === "CARD" || mode === "UPI") && terminalSettings.data?.enabled && online && (
+                        <button type="button" onClick={() => setUseTerminal(true)} className="mt-1 text-[11px] font-medium text-brand-700 hover:underline">
+                          Use Pine Labs terminal
+                        </button>
+                      )}
                     </label>
                   ) : (
                     <div className="flex flex-col justify-end text-right">
@@ -1773,11 +1815,24 @@ export default function PosPage() {
               icon={online ? <Check className="size-4" /> : <CloudOff className="size-4" />}
               onClick={() => void submit()}
             >
-              {online ? "Complete Sale" : "Save Bill Offline"}
+              {!online ? "Save Bill Offline" : terminalOn && !(terminalPaid && terminalPaid.amount === terminalAmount) ? "Collect on Terminal" : "Complete Sale"}
             </Button>
           </div>
         </div>
       </Modal>
+
+      {/* Pine Labs terminal: the customer pays by card / UPI there; once approved the bill is saved against it */}
+      {terminalOpen && (
+        <PinelabsPayModal
+          amount={terminalAmount}
+          onClose={() => setTerminalOpen(false)}
+          onApproved={(t) => {
+            setTerminalPaid(t);
+            setTerminalOpen(false);
+            void submit(overRef.current, undefined, t);
+          }}
+        />
+      )}
 
       {/* Cart: floating bottom-right, opens the bill */}
       <button
