@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button, Field, Input, LOGOS, errMsg, Logo } from "@/components/ui";
-import { homeFor, useAuth } from "@/lib/auth";
+import { homeFor, useAuth, type DeviceCapture } from "@/lib/auth";
 
 export default function LoginPage() {
   const { login, user, supplier, loading } = useAuth();
@@ -12,6 +12,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Device lock: this device has to be registered (one of the account's 2) before signing in
+  const [capture, setCapture] = useState<DeviceCapture | null>(null);
+  const [deviceName, setDeviceName] = useState("");
 
   useEffect(() => {
     if (!loading && (user || supplier)) router.replace(homeFor(supplier));
@@ -23,7 +26,12 @@ export default function LoginPage() {
     setError(null);
     try {
       // Staff go to the ERP, suppliers to their stock page
-      const kind = await login(email.trim(), password);
+      const kind = await login(email.trim(), password, capture ? { capture: true, name: deviceName } : undefined);
+      if (typeof kind === "object") {
+        setCapture(kind.deviceCapture);
+        setDeviceName(kind.deviceCapture.suggestedName);
+        return;
+      }
       router.replace(kind === "vendor" ? "/supplier" : "/dashboard");
     } catch (err) {
       setError(errMsg(err));
@@ -93,13 +101,28 @@ export default function LoginPage() {
                 </button>
               </div>
               */}
+              {capture && (
+                <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+                  <p className="font-medium">Register this device?</p>
+                  <p className="text-xs">
+                    Your account can be used on only {capture.max} devices. This will be device {capture.slot} of {capture.max} — after that you can sign in only from
+                    your registered devices. To change one, ask an administrator.
+                  </p>
+                  <Field label="Device name">
+                    <Input value={deviceName} onChange={(e) => setDeviceName(e.target.value)} placeholder="e.g. POS 2 PC" maxLength={60} />
+                  </Field>
+                  <button type="button" onClick={() => setCapture(null)} className="text-xs font-medium text-amber-800 hover:underline">
+                    Not now
+                  </button>
+                </div>
+              )}
               {error && (
                 <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
                   {error}
                 </p>
               )}
               <Button type="submit" loading={busy} className="w-full max-sm:h-10!">
-                Sign In
+                {capture ? "Register Device & Sign In" : "Sign In"}
               </Button>
             </div>
            

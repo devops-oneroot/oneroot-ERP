@@ -5,30 +5,30 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useNeedBranch } from "@/components/BranchNotice";
-import { LoadLines, type LoadLine } from "@/components/VanLoadLines";
-import { Badge, Button, Card, EmptyRow, ErrorBox, Field, Input, LoadingRow, Modal, PageHeader, Select, Table, Td, /* Textarea, */ Th, errMsg, useToast } from "@/components/ui";
+import { LoadLines, loadItems, loadProblem, type LoadLine } from "@/components/VanLoadLines";
+import { Badge, Button, Card, EmptyRow, ErrorBox, Field, Input, LoadingRow, Modal, PageHeader, Select, Table, Td, Textarea, Th, errMsg, useToast } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { dateTime, inr, n } from "@/lib/format";
+import { dateTime, inr } from "@/lib/format";
 import { useApi } from "@/lib/hooks";
-import type { VanTrip } from "@/lib/types";
+import type { VanTrip, VanTripListRow } from "@/lib/types";
 
-export default function VanTripsPage() {
+export default function VanCampaignsPage() {
   const router = useRouter();
   const [status, setStatus] = useState("");
   const { can } = useAuth();
   const [opening, setOpening] = useState(false);
-  const { data, error, loading, reload } = useApi<(VanTrip & { lines: number; salesTotal: number; _count: { sales: number } })[]>("/van-trips", { status });
+  const { data, error, loading, reload } = useApi<VanTripListRow[]>("/van-trips", { status });
 
   return (
     <>
       <PageHeader
-        title="Van Trips"
-        subtitle="Load stock onto the van in the morning, bill farmers in the villages against the trip, and reconcile returns and cash in the evening"
+        title="Van Campaigns"
+        subtitle="Record who takes stock out on the van, which products and serial numbers, what came back, what was given free, and what the campaign spent"
         actions={
           can("sales.van") && (
             <Button variant="add" icon={<Plus className="size-4" />} onClick={() => setOpening(true)}>
-              Load a Van
+              Start a Campaign
             </Button>
           )
         }
@@ -36,8 +36,8 @@ export default function VanTripsPage() {
       <Card bodyClassName="p-0">
         <div className="flex items-center gap-2 border-b border-slate-100 p-3">
           <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-40" aria-label="Status">
-            <option value="">All Trips</option>
-            <option value="OPEN">On the Road</option>
+            <option value="">All Campaigns</option>
+            <option value="OPEN">Out on the Road</option>
             <option value="CLOSED">Closed</option>
           </Select>
         </div>
@@ -49,21 +49,22 @@ export default function VanTripsPage() {
           <Table>
             <thead>
               <tr>
-                <Th>Trip</Th>
+                <Th>Campaign</Th>
                 <Th>Date</Th>
-                <Th>Salesperson</Th>
+                <Th>Taken Out By</Th>
                 <Th>Vehicle · Route</Th>
                 <Th right>Products</Th>
-                <Th right>Bills</Th>
-                <Th right>Sales</Th>
+                <Th right>Free Samples</Th>
+                <Th right>Expenses</Th>
+                <Th right>Total Cost</Th>
                 <Th>Status</Th>
               </tr>
             </thead>
             <tbody>
               {loading && !data ? (
-                <LoadingRow colSpan={8} />
+                <LoadingRow colSpan={9} />
               ) : !data?.length ? (
-                <EmptyRow colSpan={8}>No van trips yet — load a van to sell in the villages</EmptyRow>
+                <EmptyRow colSpan={9}>No van campaigns yet — start one when stock goes out on the van</EmptyRow>
               ) : (
                 data.map((t) => (
                   <tr key={t.id} className="cursor-pointer hover:bg-slate-50" onClick={() => router.push(`/van/${t.id}`)}>
@@ -74,13 +75,14 @@ export default function VanTripsPage() {
                     <Td>{t.user?.name}</Td>
                     <Td className="text-xs text-slate-600">{[t.vehicleNo, t.route].filter(Boolean).join(" · ") || "—"}</Td>
                     <Td right>{t.lines}</Td>
-                    <Td right>{t._count.sales}</Td>
-                    <Td right className="font-semibold">{inr(t.salesTotal)}</Td>
+                    <Td right>{t.status === "OPEN" ? "—" : inr(t.samplesCost)}</Td>
+                    <Td right>{inr(t.expensesTotal)}</Td>
+                    <Td right className="font-semibold">{inr(t.totalCost)}</Td>
                     <Td>
                       {t.status === "OPEN" ? (
-                        <Badge tone="amber">On the Road</Badge>
-                      ) : n(t.cashDifference) !== 0 ? (
-                        <Badge tone="red">Closed · cash {n(t.cashDifference) > 0 ? "over" : "short"} {inr(Math.abs(n(t.cashDifference)))}</Badge>
+                        <Badge tone="amber">Out on the Road</Badge>
+                      ) : t.lossCost > 0 ? (
+                        <Badge tone="red">Closed · {inr(t.lossCost)} missing</Badge>
                       ) : (
                         <Badge tone="green">Closed</Badge>
                       )}
@@ -93,7 +95,7 @@ export default function VanTripsPage() {
         )}
       </Card>
       {opening && (
-        <OpenTripModal
+        <StartCampaignModal
           onClose={() => setOpening(false)}
           onOpened={(id) => {
             setOpening(false);
@@ -105,24 +107,30 @@ export default function VanTripsPage() {
   );
 }
 
-function OpenTripModal({ onClose, onOpened }: { onClose: () => void; onOpened: (id: string) => void }) {
+function StartCampaignModal({ onClose, onOpened }: { onClose: () => void; onOpened: (id: string) => void }) {
   const toast = useToast();
-  const needBranch = useNeedBranch("load a van from it");
+  const needBranch = useNeedBranch("take stock out from it");
   const [vehicleNo, setVehicleNo] = useState("");
   const [route, setRoute] = useState("");
-  const [openingCash, setOpeningCash] = useState("");
-  // const [notes, setNotes] = useState(""); // the Notes field is commented out below
+  const [team, setTeam] = useState("");
+  const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<LoadLine[]>([]);
   const [busy, setBusy] = useState(false);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    const items = lines.filter((l) => n(l.quantity) > 0).map((l) => ({ productId: l.product.id, quantity: n(l.quantity) }));
-    if (!items.length) return toast.error("Add at least one product with a quantity");
+    const problem = loadProblem(lines);
+    if (problem) return toast.error(problem);
     setBusy(true);
     try {
-      const t = await api.post<VanTrip>("/van-trips", { vehicleNo: vehicleNo.trim() || undefined, route: route.trim() || undefined, openingCash: n(openingCash) || 0, /* notes: notes.trim() || undefined, */ items });
-      toast.success(`Trip ${t.tripNo} loaded — bill from it on the POS`);
+      const t = await api.post<VanTrip>("/van-trips", {
+        vehicleNo: vehicleNo.trim() || undefined,
+        route: route.trim() || undefined,
+        team: team.trim() || undefined,
+        notes: notes.trim() || undefined,
+        items: loadItems(lines),
+      });
+      toast.success(`Campaign ${t.tripNo} started`);
       onOpened(t.id);
     } catch (err) {
       toast.error(errMsg(err));
@@ -135,7 +143,7 @@ function OpenTripModal({ onClose, onOpened }: { onClose: () => void; onOpened: (
     <Modal
       open
       onClose={onClose}
-      title="Load a Van"
+      title="Start a Van Campaign"
       size="lg"
       footer={
         <>
@@ -143,7 +151,7 @@ function OpenTripModal({ onClose, onOpened }: { onClose: () => void; onOpened: (
             Cancel
           </Button>
           <Button type="submit" form="van-open" loading={busy} disabled={needBranch.blocked} icon={<Truck className="size-4" />}>
-            Start Trip
+            Start Campaign
           </Button>
         </>
       }
@@ -151,20 +159,18 @@ function OpenTripModal({ onClose, onOpened }: { onClose: () => void; onOpened: (
       {needBranch.notice && <div className="mb-3">{needBranch.notice}</div>}
       <form id="van-open" onSubmit={save} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Field label="Vehicle No.">
-          <Input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value.toUpperCase())} placeholder="TN 33 AB 1234" />
+          <Input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value.toUpperCase())} placeholder="KA 10 AB 1234" />
         </Field>
         <Field label="Route / Villages" className="sm:col-span-2">
-          <Input value={route} onChange={(e) => setRoute(e.target.value)} placeholder="Perundurai – Kodumudi – Chennimalai" />
+          <Input value={route} onChange={(e) => setRoute(e.target.value)} placeholder="Hanur – Kollegal – Yelandur" />
         </Field>
-        <Field label="Opening Cash (Change)" hint="Cash given to the van for change">
-          <Input type="number" min="0" step="1" value={openingCash} onChange={(e) => setOpeningCash(e.target.value)} className="num" />
+        <Field label="Team" hint="Others going with you" className="sm:col-span-3">
+          <Input value={team} onChange={(e) => setTeam(e.target.value)} placeholder="Names of the team members" />
         </Field>
-        {/* Trip notes were saved but never shown anywhere (the trip page shows only the closing note)
-        <Field label="Notes" className="sm:col-span-2">
-          <Textarea rows={1} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        <Field label="Purpose" className="sm:col-span-3">
+          <Textarea rows={1} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Kharif demo – paddy seed and sprayers" />
         </Field>
-        */}
-        <Field label="Stock Loaded" required className="sm:col-span-3" hint="Loaded stock stays in the branch's books but is reserved for the van until it comes back">
+        <Field label="Stock Taken Out" required className="sm:col-span-3" hint="It stays in the branch's stock but can't be sold at the counter until the campaign closes">
           <LoadLines lines={lines} setLines={setLines} />
         </Field>
       </form>

@@ -43,6 +43,9 @@ import { useApi } from "@/lib/hooks";
 import { PERMISSIONS, defaultsFor, normalizePermissions, type Permission } from "@/lib/permissions";
 import { ROLES, type BuiltInRole, type Department, type Role, type RoleTemplate, type User } from "@/lib/types";
 
+/** Device lock: how many devices a non-admin may sign in on (matches the API) */
+const MAX_DEVICES = 2;
+
 const ROLE_INFO: Record<Role, string> = {
   ADMIN: "Everything, always — including users, store settings and the audit log",
   MANAGER: "Inventory, Purchases, Reports, Approvals and Cancellations",
@@ -79,6 +82,8 @@ function Users() {
   const [deptFilter, setDeptFilter] = useState("");
   const [editing, setEditing] = useState<User | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  // User whose devices are open
+  const [devicesOf, setDevicesOf] = useState<User | null>(null);
   const [roleForm, setRoleForm] = useState<{ template: RoleTemplate | null; departmentId: string | null } | null>(null);
   type Filter = "department" | "role" | "user";
   // The tab is kept in the address (?tab=department|role|user), so the old Departments / Roles links land on theirs
@@ -200,15 +205,16 @@ function Users() {
                 <Th>Branch</Th>
                 <Th className="hidden md:table-cell">Phone</Th>
                 <Th className="hidden md:table-cell">Last Sign-In</Th>
+                <Th>Devices</Th>
                 <Th>Status</Th>
                 <ActionsTh />
               </tr>
             </thead>
             <tbody>
               {loading && !data ? (
-                <LoadingRow colSpan={10} />
+                <LoadingRow colSpan={11} />
               ) : !rows.length ? (
-                <EmptyRow colSpan={10}>{deptFilter ? "No users in this department" : "No users"}</EmptyRow>
+                <EmptyRow colSpan={11}>{deptFilter ? "No users in this department" : "No users"}</EmptyRow>
               ) : (
                 rows.map((u) => (
                   <tr key={u.id} className={cx("hover:bg-slate-50", !u.isActive && "text-slate-400")}>
@@ -263,6 +269,20 @@ function Users() {
                     </Td>
                     <Td className="hidden md:table-cell">{u.phone || "—"}</Td>
                     <Td className="hidden text-xs md:table-cell">{u.lastLoginAt ? dateTime(u.lastLoginAt) : "Never"}</Td>
+                    <Td className="whitespace-nowrap">
+                      {u.role === "ADMIN" ? (
+                        <span className="text-xs text-slate-400">Not locked</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setDevicesOf(u)}
+                          className="text-sm font-medium text-brand-700 hover:underline"
+                          title="Devices this user can sign in on"
+                        >
+                          {u.devices?.length ?? 0}/{MAX_DEVICES}
+                        </button>
+                      )}
+                    </Td>
                     <Td>{u.isActive ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>}</Td>
                     <ActionsTd>
                       {/* Only an administrator can edit an administrator */}
@@ -330,6 +350,14 @@ function Users() {
           }}
         />
       )}
+      {devicesOf && (
+        <DevicesModal
+          user={(data ?? []).find((u) => u.id === devicesOf.id) ?? devicesOf}
+          canRemove={can("users.edit")}
+          onClose={() => setDevicesOf(null)}
+          onChanged={() => void reload()}
+        />
+      )}
       {roleForm && (
         <RoleTemplateForm
           template={roleForm.template}
@@ -342,6 +370,70 @@ function Users() {
         />
       )}
     </>
+  );
+}
+
+/** The devices a user is locked to; removing one frees the slot (their next new device is captured at sign-in) */
+function DevicesModal({ user, canRemove, onClose, onChanged }: { user: User; canRemove: boolean; onClose: () => void; onChanged: () => void }) {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [busy, setBusy] = useState<string | null>(null);
+  const devices = user.devices ?? [];
+
+  async function remove(id: string, name: string) {
+    if (!(await confirm(`Remove "${name}" from ${user.name}'s devices? They can no longer sign in on it; the next new device they sign in on takes its place.`, { danger: true, confirmLabel: "Remove" })))
+      return;
+    setBusy(id);
+    try {
+      await api.del(`/users/${user.id}/devices/${id}`);
+      toast.success(`${name} removed`);
+      onChanged();
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`${user.name} — Devices`}
+      footer={
+        <Button variant="secondary" onClick={onClose}>
+          Close
+        </Button>
+      }
+    >
+      <p className="mb-3 text-sm text-slate-600">
+        {user.name} can sign in only on these devices (up to {MAX_DEVICES}). A new device is registered when they confirm it at sign-in, while a slot is free. Nobody —
+        not even an administrator — can sign in to this account from any other device.
+      </p>
+      {!devices.length ? (
+        <p className="rounded-lg border border-dashed border-slate-300 px-4 py-5 text-center text-sm text-slate-400">No devices yet — the first device they sign in on is registered</p>
+      ) : (
+        <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+          {devices.map((d, i) => (
+            <li key={d.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+              <span className="num w-5 text-slate-400">{i + 1}</span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium text-slate-800">{d.name || "Unnamed device"}</p>
+                <p className="text-xs text-slate-500">
+                  Added {dateTime(d.createdAt)}
+                  {d.lastUsedAt ? ` · last sign-in ${dateTime(d.lastUsedAt)}` : ""}
+                </p>
+              </div>
+              {canRemove && (
+                <Button size="sm" variant="ghost" onClick={() => void remove(d.id, d.name || "Unnamed device")} loading={busy === d.id}>
+                  Remove
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
   );
 }
 

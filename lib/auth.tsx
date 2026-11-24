@@ -44,7 +44,7 @@ export interface SessionUser {
   /** What this user may do (see lib/permissions.ts); administrators may do everything */
   permissions: string[];
   /** Custom role name, when the user was given one */
-  roleTemplate?: { name: string } | null;
+  roleTemplate?: { name: string; level?: "L1" | "L2" | "L3" | null } | null;
 }
 
 /** A supplier portal sign-in: sees only their own stock (/supplier); never a staff user */
@@ -57,6 +57,13 @@ export interface SupplierSession {
 }
 
 type MeResponse = SessionUser | SupplierSession;
+
+/** Sign-in needs this device registered first (device lock: up to `max` devices per user) */
+export interface DeviceCapture {
+  slot: number;
+  max: number;
+  suggestedName: string;
+}
 const isSupplier = (u: MeResponse | null | undefined): u is SupplierSession => !!u && "kind" in u && u.kind === "vendor";
 
 /** Where each kind of session starts */
@@ -68,8 +75,8 @@ interface AuthState {
   /** Supplier portal session, when the person signed in is a supplier */
   supplier: SupplierSession | null;
   loading: boolean;
-  /** Signs in and says which kind of account it was */
-  login: (email: string, password: string) => Promise<"staff" | "vendor">;
+  /** Signs in and says which kind of account it was, or that this device must be registered first */
+  login: (email: string, password: string, device?: { capture: true; name?: string }) => Promise<"staff" | "vendor" | { deviceCapture: DeviceCapture }>;
   logout: () => void;
   /** True when the user holds any of these permissions (administrators always do) */
   can: (...perms: Permission[]) => boolean;
@@ -113,8 +120,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [apply]);
 
   const login = useCallback(
-    async (email: string, password: string) => {
-      const res = await api.post<{ token: string; user: MeResponse }>("/auth/login", { email, password });
+    async (email: string, password: string, device?: { capture: true; name?: string }) => {
+      const res = await api.post<{ token: string; user: MeResponse } | { deviceCapture: DeviceCapture }>("/auth/login", {
+        email,
+        password,
+        ...(device ? { captureDevice: true, deviceName: device.name?.trim() || undefined } : {}),
+      });
+      // A new device for a locked account: the user confirms it before a session starts
+      if ("deviceCapture" in res) return { deviceCapture: res.deviceCapture };
       clearApiCache();
       setToken(res.token);
       if (!isSupplier(res.user)) persistSet("/auth/me", res.user);

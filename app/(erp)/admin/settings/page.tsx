@@ -310,7 +310,7 @@ function PoMailTemplate({ subject, body, onChange }: { subject: string; body: st
       <Field label="Subject" className="sm:col-span-2">
         <Input value={subject} onChange={(e) => onChange("poMailSubject", e.target.value)} placeholder={data?.subject} />
       </Field>
-      <Field label="Message" className="sm:col-span-2" hint="One line per line of the email. Put {items} on a line of its own where the item table should go.">
+      <Field label="Message" className="sm:col-span-2" hint="One line per line of the email. The items are not listed in the email — they are in the attached PO PDF.">
         <Textarea rows={12} value={body} onChange={(e) => onChange("poMailBody", e.target.value)} placeholder={data?.body} className="font-mono text-xs" />
       </Field>
       <div className="flex flex-wrap items-center justify-end gap-2 sm:col-span-2">

@@ -125,7 +125,7 @@ export const NAV: NavGroup[] = [
       { href: "/customers", label: "Customers", icon: <Users />, perms: ["customers.view"] },
       { href: "/customers/reminders", label: "Due Reminders", icon: <BellRing />, perms: ["customers.view"] },
       { href: "/approvals", label: "Approvals", icon: <BadgeCheck />, perms: ["sales.bill", "approvals.decide"] },
-      { href: "/van", label: "Van Trips", icon: <Truck />, perms: ["van.view", "sales.van"] },
+      { href: "/van", label: "Van Campaigns", icon: <Truck />, perms: ["van.view", "sales.van"] },
       { href: "/agents", label: "Agents", icon: <UserRoundPlus />, perms: ["sales.bill", "vendors.view"] },
       { href: "/quotations", label: "Quotations", icon: <ReceiptText />, perms: ["sales.view", "sales.bill"] },
       { href: "/bookings", label: "Advance Bookings", icon: <CalendarClock />, perms: ["bookings.view"] },

@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { RequirePerm } from "@/components/AppShell";
 import { Attachments } from "@/components/Attachments";
+import { CancelNoteModal, canCancelNote } from "@/components/CancelNoteModal";
 import { NoteForm, NoteStatusBadge, ReasonBadge, noteTypeName, postLabel, reducesPayable } from "@/components/NoteForm";
 import { ListFilters, hasListFilters, noListFilters } from "@/components/ListFilters";
 import {
@@ -39,6 +40,7 @@ import { useAuth } from "@/lib/auth";
 import { amountInWords, date, inr, n, qty } from "@/lib/format";
 import { placeOfSupply } from "@/lib/gst";
 import { useApi } from "@/lib/hooks";
+import { approvalLevel } from "@/lib/permissions";
 import { NOTE_REASON_LABEL, type Branch, type DebitNote, type DebitNoteStatus, type NoteType, type Paged, type StoreSettings } from "@/lib/types";
 
 type Filter = "" | DebitNoteStatus;
@@ -77,8 +79,10 @@ function Notes() {
   const canCreate = can("notes.create");
   const canEdit = can("notes.edit");
   const canDelete = can("notes.delete");
-  // Only whoever raised a note can cancel it
-  const canCancel = (dn: DebitNote) => !dn.userId || dn.userId === user?.id;
+  // Drafts: whoever raised them; posted notes (vendor gave another solution): L2 and above
+  const level = approvalLevel(user);
+  const canCancel = (dn: DebitNote) => canCancelNote(dn, { userId: user?.id, canDelete, level });
+  const [cancelling, setCancelling] = useState<DebitNote | null>(null);
   const canVendors = can("vendors.view");
   const pathname = usePathname();
   const params = useSearchParams();
@@ -126,23 +130,14 @@ function Notes() {
     }
   }
 
-  async function cancel(dn: DebitNote) {
-    const msg = `Cancel ${noteTypeName(dn.noteType)} ${dn.dnNo}? It hasn't been ${dn.noteType === "DEBIT" ? "sent" : "applied"} yet, so stock and balances are unaffected.`;
-    if (!(await confirm(msg, { danger: true, confirmLabel: "Cancel Note" }))) return;
-    setBusy(dn.id);
-    try {
-      await api.post(`/debit-notes/${dn.id}/cancel`);
-      toast.success(`${dn.dnNo} cancelled`);
-      void reload();
-      setViewing((v) => (v?.id === dn.id ? { ...v, status: "CANCELLED" } : v));
-    } catch (e) {
-      toast.error(errMsg(e));
-    } finally {
-      setBusy(null);
-    }
-  }
-
   const actions = (dn: DebitNote, size: "sm" | "md" = "sm") =>
+    dn.status === "SENT" ? (
+      canCancel(dn) && (
+        <Button size={size} variant="ghost" icon={<Ban className="size-4" />} onClick={() => setCancelling(dn)}>
+          Cancel
+        </Button>
+      )
+    ) :
     dn.status === "DRAFT" &&
     (canEdit || canDelete) && (
       <>
@@ -156,8 +151,8 @@ function Notes() {
           {postLabel(dn.noteType)}
         </Button>
         )}
-        {canDelete && canCancel(dn) && (
-          <Button size={size} variant="ghost" icon={<Ban className="size-4" />} onClick={() => cancel(dn)} disabled={busy === dn.id}>
+        {canCancel(dn) && (
+          <Button size={size} variant="ghost" icon={<Ban className="size-4" />} onClick={() => setCancelling(dn)} disabled={busy === dn.id}>
             Cancel
           </Button>
         )}
@@ -290,6 +285,7 @@ function Notes() {
                       <Td className="min-w-48 max-w-64">
                         <ReasonBadge reason={dn.reasonType} />
                         <p className="mt-0.5 text-xs text-slate-600">{dn.reason}</p>
+                        {dn.status === "CANCELLED" && dn.cancelReason && <p className="mt-0.5 text-xs text-red-600">Cancelled: {dn.cancelReason}</p>}
                       </Td>
                       <Td className="whitespace-nowrap text-sm">
                         <Against dn={dn} />
@@ -355,6 +351,20 @@ function Notes() {
             <NoteDoc dn={viewing} store={store} />
           </div>
         </>
+      )}
+
+      {cancelling && (
+        <CancelNoteModal
+          dn={cancelling}
+          level={level}
+          onClose={() => setCancelling(null)}
+          onCancelled={() => {
+            const id = cancelling.id;
+            setCancelling(null);
+            void reload();
+            setViewing((v) => (v?.id === id ? { ...v, status: "CANCELLED" } : v));
+          }}
+        />
       )}
 
       <NoteForm
@@ -522,6 +532,15 @@ function NoteDoc({ dn, store, onShipTo }: { dn: DebitNote; store: StoreSettings 
           <dd>{NOTE_REASON_LABEL[dn.reasonType]}</dd>
           <dt className="text-slate-500">Reason</dt>
           <dd>{dn.reason}</dd>
+          {dn.status === "CANCELLED" && dn.cancelReason && (
+            <>
+              <dt className="text-slate-500">Cancelled</dt>
+              <dd className="text-red-700">
+                {dn.cancelReason}
+                {dn.cancelledAt ? ` · ${date(dn.cancelledAt)}` : ""}
+              </dd>
+            </>
+          )}
         </dl>
       </div>
       {/* Scrolls sideways inside the modal on phones; prints at full width */}

@@ -123,6 +123,17 @@ export interface User {
   branch?: BranchRef | null;
   /** Approval PIN is set (managers / owner) */
   hasPin?: boolean;
+  /** Device lock (non-admins): the up to 2 devices they may sign in on */
+  devices?: UserDevice[];
+}
+
+/** A device a user is locked to, captured when they confirmed it at sign-in */
+export interface UserDevice {
+  id: string;
+  name?: string | null;
+  userAgent?: string | null;
+  createdAt: string;
+  lastUsedAt?: string | null;
 }
 
 /** A custom role: a named set of ticks built on a built-in role (which supplies the authority limits) */
@@ -771,7 +782,7 @@ export interface AdvanceBooking {
   payments?: (Payment & { user?: { name: string } | null })[];
 }
 
-export type SerialStatus = "IN_STOCK" | "SOLD";
+export type SerialStatus = "IN_STOCK" | "SOLD" | "ON_CAMPAIGN";
 
 /** One serial-numbered unit of a product */
 export interface SerialNumber {
@@ -1270,6 +1281,9 @@ export interface DebitNote {
   /** Shipping address typed on the note */
   shipTo?: string | null;
   status: DebitNoteStatus;
+  /** Why the note was cancelled, and when */
+  cancelReason?: string | null;
+  cancelledAt?: string | null;
   /** Goods return: stock leaves when posted */
   affectsStock: boolean;
   /** Money-only note: the payable drops when posted */
@@ -1522,6 +1536,7 @@ export const MONEY_MODES: PaymentMode[] = ["CASH", "UPI", "CARD", "KCC", "BANK",
 export type SaleChannel = "COUNTER" | "VAN";
 
 /** A van-stock day */
+/** Van campaign (marketing / demo run). Older van-sale trips also carry cash fields and bills. */
 export interface VanTrip {
   id: string;
   tripNo: string;
@@ -1532,6 +1547,7 @@ export interface VanTrip {
   date: string;
   vehicleNo?: string | null;
   route?: string | null;
+  team?: string | null;
   status: "OPEN" | "CLOSED";
   openingCash: Dec;
   cashExpected?: Dec | null;
@@ -1541,20 +1557,33 @@ export interface VanTrip {
   closeNote?: string | null;
   closedAt?: string | null;
 }
-
+export interface VanTripListRow extends VanTrip {
+  lines: number;
+  samplesCost: number;
+  lossCost: number;
+  expensesTotal: number;
+  totalCost: number;
+}
 export interface VanTripDetail extends VanTrip {
   items: {
     id: string;
     productId: string;
-    product: { id: string; name: string; sku: string; unit: string; salePrice: Dec; packSize?: string | null };
+    product: { id: string; name: string; sku: string; unit: string; salePrice: Dec; purchasePrice?: Dec; packSize?: string | null; trackSerial?: boolean };
     loadedQty: Dec;
     soldQty: number;
     onVan: number;
     returnedQty?: Dec | null;
+    givenQty?: Dec | null;
     shortQty?: Dec | null;
+    givenCost?: Dec | null;
+    shortCost?: Dec | null;
+    serialNos: string[];
+    givenSerials: string[];
+    shortSerials: string[];
   }[];
-  sales: { id: string; invoiceNo: string; saleDate: string; customerName?: string | null; customer?: { name: string } | null; totalAmount: Dec; paidAmount: Dec; paymentMode: PaymentMode }[];
-  summary: { salesTotal: number; bills: number; credit: number; cashSales: number; cashRefunds: number; cashExpected: number; byMode: { mode: PaymentMode; amount: number }[] };
+  expenses: (Expense & { category: ExpenseCategory })[];
+  sales: { id: string; invoiceNo: string; totalAmount: Dec }[];
+  summary: { samplesCost: number; lossCost: number; expensesTotal: number; totalCost: number; outValue: number; bills: number };
 }
 
 /** A POS cart parked for later (hold / recall) */

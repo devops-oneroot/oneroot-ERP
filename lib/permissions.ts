@@ -15,10 +15,10 @@ export const PERMISSIONS = [
   { key: 'sales.returns', section: 'Sales & Customers', module: 'Sales Returns', action: 'create', label: 'Make a sales return', roles: ['MANAGER', 'CASHIER'] },
   { key: 'returns.edit', section: 'Sales & Customers', module: 'Sales Returns', action: 'edit', label: 'Edit sales returns — not in use yet', roles: [], planned: true },
   { key: 'returns.delete', section: 'Sales & Customers', module: 'Sales Returns', action: 'delete', label: 'Delete sales returns — not in use yet', roles: [], planned: true },
-  { key: 'van.view', section: 'Sales & Customers', module: 'Van Sales', action: 'view', label: 'Van trips', roles: ['MANAGER', 'CASHIER'] },
-  { key: 'sales.van', section: 'Sales & Customers', module: 'Van Sales', action: 'create', label: 'Open, load and close van trips and bill on the route', roles: ['MANAGER', 'CASHIER'] },
-  { key: 'van.edit', section: 'Sales & Customers', module: 'Van Sales', action: 'edit', label: 'Edit van sales — not in use yet', roles: [], planned: true },
-  { key: 'van.delete', section: 'Sales & Customers', module: 'Van Sales', action: 'delete', label: 'Delete van sales — not in use yet', roles: [], planned: true },
+  { key: 'van.view', section: 'Sales & Customers', module: 'Van Campaign', action: 'view', label: 'Van campaigns: stock taken out, returned, given free, and campaign expenses', roles: ['MANAGER', 'CASHIER'] },
+  { key: 'sales.van', section: 'Sales & Customers', module: 'Van Campaign', action: 'create', label: 'Start, load and close van campaigns and add campaign expenses', roles: ['MANAGER', 'CASHIER'] },
+  { key: 'van.edit', section: 'Sales & Customers', module: 'Van Campaign', action: 'edit', label: 'Edit van campaigns — not in use yet', roles: [], planned: true },
+  { key: 'van.delete', section: 'Sales & Customers', module: 'Van Campaign', action: 'delete', label: 'Delete van campaigns — not in use yet', roles: [], planned: true },
   { key: 'customers.view', section: 'Sales & Customers', module: 'Customers', action: 'view', label: 'Customers, ledgers and due reminders', roles: ['MANAGER', 'CASHIER'] },
   { key: 'customers.create', section: 'Sales & Customers', module: 'Customers', action: 'create', label: 'Add customers', roles: ['MANAGER', 'CASHIER'] },
   { key: 'customers.edit', section: 'Sales & Customers', module: 'Customers', action: 'edit', label: 'Edit customers, log follow-ups, send a reminder', roles: ['MANAGER', 'CASHIER'] },
@@ -162,6 +162,15 @@ export function defaultsFor(role: Role): Permission[] {
 export function normalizePermissions(keys: readonly string[]): Permission[] {
   const wanted = new Set(keys.flatMap((k) => LEGACY_PERMISSIONS[k] ?? [k]));
   return PERMISSION_KEYS.filter((k) => wanted.has(k));
+}
+
+/** Approval level as the API works it out: administrators 3, else the role's level (built-in managers 2), else 1 */
+export function approvalLevel(user: { role: string; roleTemplate?: { level?: string | null } | null } | null | undefined) {
+  if (!user) return 0;
+  if (user.role === "ADMIN") return 3;
+  const l = user.roleTemplate?.level;
+  if (l === "L1" || l === "L2" || l === "L3") return Number(l[1]);
+  return user.role === "MANAGER" ? 2 : 1;
 }
 
 /** True when the user may do any of these things. Administrators may do everything. */

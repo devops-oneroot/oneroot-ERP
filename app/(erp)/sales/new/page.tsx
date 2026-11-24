@@ -1020,7 +1020,7 @@ export default function PosPage() {
           {van ? (
             <span>
               <b>Van trip {van.tripNo}</b>
-              {van.route ? ` · ${van.route}` : ""} · billing from the van&apos;s load ({van.items.reduce((s, i) => s + (i.onVan > 0 ? 1 : 0), 0)} products left) · {van.summary.bills} bills, {inr(van.summary.salesTotal)} so far
+              {van.route ? ` · ${van.route}` : ""} · billing from the van&apos;s load ({van.items.reduce((s, i) => s + (i.onVan > 0 ? 1 : 0), 0)} products left) · {van.summary.bills} bills so far
             </span>
           ) : (
             <span>{vanQ.loading ? "Loading the van trip…" : "This van trip is closed or not available."}</span>

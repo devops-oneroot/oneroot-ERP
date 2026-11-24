@@ -5,6 +5,10 @@ import { Button, Modal } from "./ui";
 /** Standard terms every purchase order is placed on */
 export const PO_TERMS: { title: string; text: string }[] = [
   {
+    title: "PO Number on Tax Invoice",
+    text: "This PO number must be mentioned on the vendor's tax invoice. Invoices without the PO number may not be accepted.",
+  },
+  {
     title: "Validity",
     text: "This purchase order is valid only for the expiry days chosen on it, counted from the invoice date. Goods supplied after it expires may be refused.",
   },
@@ -38,20 +42,20 @@ export const PO_TERMS: { title: string; text: string }[] = [
   },
   {
     title: "Jurisdiction",
-    text: "Any dispute is subject to the bangalore jurisdiction of the courts where our ordering branch is located.",
+    text: "Any dispute is subject to Bangalore jurisdiction only.",
   },
 ];
 
 /** One-line version of the terms for the printed PO */
 export const PO_TERMS_SHORT: string[] = [
+  "This PO number must be mentioned on the tax invoice.",
   "Valid only for the expiry days shown, from the PO date.",
   "Supply only the ordered products, pack sizes and quantities.",
-  "Rates are fixed and exclude GST; charges only as shown.",
   "Deliver by the expected date with an invoice quoting this PO no.",
   "Every pack must show batch, mfg and expiry dates; under 6 months' shelf life may be rejected.",
   "Damaged or sub-standard goods are returned at the vendor's cost.",
   "Payment as per agreed credit terms, for quantity accepted at goods inward.",
-  "Disputes are subject to the jurisdiction of the ordering branch.",
+  "Disputes are subject to Bangalore jurisdiction only.",
 ];
 
 /**  for purchase orders, opened from the PO form */
