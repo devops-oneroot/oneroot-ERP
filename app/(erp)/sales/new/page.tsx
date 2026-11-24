@@ -627,7 +627,6 @@ export default function PosPage() {
       }
     }
     if (summary.total <= 0) return "Bill total must be more than zero";
-    if (!agentId) return "Choose the agent for this bill";
     if (advanceTotal > 0 && !online) return "Setting an advance against the bill needs internet — untick the advance or wait for the connection";
     if (!split && !mode && payable > 0) return "Choose the payment type";
     if (!customer && due > 0) return "Credit needs a registered customer — pick or add the farmer first";
@@ -1372,11 +1371,9 @@ export default function PosPage() {
               </div>
             )}
           </div>
-          {/* Row 1 · Agent (required) — internal reference only: shown in sales lists and details, not on the printed bill */}
+          {/* Row 1 · Agent (optional) — internal reference only: shown in sales lists and details, not on the printed bill */}
           <section className="min-w-0 border-b border-line p-4">
-            <p className="mb-1 text-xs font-medium text-slate-600">
-              Agent<span className="text-red-500"> *</span>
-            </p>
+            <p className="mb-1 text-xs font-medium text-slate-600">Agent</p>
             <Dropdown
               options={agentOptions}
               value={agentId}
