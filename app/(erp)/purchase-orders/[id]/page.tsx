@@ -1064,11 +1064,8 @@ function PoPrint({ po, store, notApproved }: { po: PurchaseOrder; store: StoreSe
   const igst = po.isInterState ?? isInterState(supplier, store);
   const tax = n(po.taxAmount);
   const slabs = poGstSlabs(po);
-  const validUntil = po.validUntil
-    ? new Date(po.validUntil)
-    : po.expiryDays
-      ? new Date(new Date(po.orderDate).getTime() + po.expiryDays * 86_400_000)
-      : null;
+  // Set by the server once the PO is sent for approval; a draft's validity hasn't started yet
+  const validUntil = po.validUntil ? new Date(po.validUntil) : null;
   const join = (...parts: (string | null | undefined)[]) => parts.filter(Boolean).join(", ");
   // Items only, incl. their GST (the PO's GST also covers the charges)
   const itemsTotal = round2(items.reduce((s, it) => s + n(it.amount), 0));
@@ -1079,7 +1076,7 @@ function PoPrint({ po, store, notApproved }: { po: PurchaseOrder; store: StoreSe
     ["PO Number", po.poNo],
     ["PO Date", date(po.orderDate)],
     ["Expected Delivery", date(po.expectedDate)],
-    ["Valid Till", validUntil ? `${date(validUntil)} · ${po.expiryDays} days` : "—"],
+    ["Valid Till", validUntil ? `${date(validUntil)} · ${po.expiryDays} days` : po.expiryDays ? `${po.expiryDays} days from approval request` : "—"],
     ["Place of Supply", placeOfSupply(supplier, store).label],
     ["Vendor Code", v?.code || "—"],
     [vb?.gstin ? "Branch GSTIN" : "Vendor GSTIN", supplier?.gstin || "—"],
