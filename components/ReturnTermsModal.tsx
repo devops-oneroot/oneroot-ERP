@@ -38,7 +38,7 @@ export const RETURN_TERMS: { title: string; text: string }[] = [
   },
   {
     title: "Jurisdiction",
-    text: "Any dispute is subject to the jurisdiction of the courts where the selling branch is located.",
+    text: "Any dispute is subject to Bangalore jurisdiction only.",
   },
 ];
 

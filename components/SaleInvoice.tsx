@@ -259,7 +259,7 @@ export function SaleInvoice({ sale, settings }: { sale: Sale; settings: StoreSet
       {/* Footer */}
       <footer className="mt-8 border-t border-slate-300 pt-3 text-[11px] text-slate-600">
         {settings?.invoiceFooter && <p className="whitespace-pre-line">{settings.invoiceFooter}</p>}
-        <p className="mt-1">Goods once sold will be taken back only as per store policy. Subject to local jurisdiction.</p>
+        <p className="mt-1">Goods once sold will be taken back only as per store policy. Subject to Bangalore jurisdiction.</p>
         <SystemGeneratedNote doc="invoice" className="mt-2.5" />
       </footer>
     </div>
