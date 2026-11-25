@@ -651,10 +651,14 @@ export default function PosPage() {
       date: new Date().toISOString(),
       customerName: customer?.name ?? (walkinName.trim() || null),
       customerPhone: customer?.phone ?? (phone || null),
+      customerGstin: customer?.gstin ?? null,
+      customerAddress: customer ? [customer.village, customer.address, customer.city, customer.pincode].filter(Boolean).join(", ") || null : null,
+      customerState: customer?.state ?? null,
       lines: lines.flatMap((l) => {
         const p = pricing.byKey.get(l.key);
-        const paid = { name: l.product.name, qty: n(l.quantity), unit: l.product.unit, rate: n(l.rate), amount: round2(lineGross(l, p) * summary.factor), gstRate: n(l.product.gstRate) };
-        return p && p.freeQty > 0 ? [paid, { name: `${l.product.name} (free - ${p.schemeName})`, qty: p.freeQty, unit: l.product.unit, rate: 0, amount: 0, gstRate: n(l.product.gstRate) }] : [paid];
+        const hsnCode = l.product.hsnCode ?? null;
+        const paid = { name: l.product.name, qty: n(l.quantity), unit: l.product.unit, rate: n(l.rate), amount: round2(lineGross(l, p) * summary.factor), gstRate: n(l.product.gstRate), hsnCode };
+        return p && p.freeQty > 0 ? [paid, { name: `${l.product.name} (free - ${p.schemeName})`, qty: p.freeQty, unit: l.product.unit, rate: 0, amount: 0, gstRate: n(l.product.gstRate), hsnCode }] : [paid];
       }),
       taxable: summary.taxable,
       discount: summary.discount,

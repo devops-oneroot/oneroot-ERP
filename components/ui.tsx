@@ -1,5 +1,6 @@
 "use client";
 
+import { THERMAL_LOGO_DATA_URL } from "@/lib/thermalLogo";
 import { AlertTriangle, Calendar, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Eye, EyeOff, Loader2, Pencil, Search, Trash2, X, XCircle } from "lucide-react";
 import {
   Children,
@@ -555,6 +556,13 @@ export function Logo({
  * emailed to vendors. `src` picks the image (the stacked logo unless given).
  * `className` places it; `imageClassName` sizes the image (default 56px tall).
  */
+/**
+ * Thermal receipts: a plain black-on-white logo (no colour, no transparency, no CSS filter). Receipt printers have no
+ * colour or grey, and their drivers turn the orange logo — or a transparent / filtered image — into blank paper.
+ */
+export const THERMAL_LOGO_SRC = THERMAL_LOGO_DATA_URL;
+export const THERMAL_LOGO = "[print-color-adjust:exact] [-webkit-print-color-adjust:exact]";
+
 export function PrintLogo({
   src = LOGOS.vertical.src,
   className,

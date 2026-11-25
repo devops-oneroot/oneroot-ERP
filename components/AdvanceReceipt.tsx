@@ -2,7 +2,7 @@
 
 import { amountInWords, dateTime, date, inr, n, qty, round2 } from "@/lib/format";
 import { modeLabel, type AdvanceBooking, type Payment, type StoreSettings } from "@/lib/types";
-import { PrintHeader, PrintLogo, SystemGeneratedNote } from "./ui";
+import { PrintHeader, PrintLogo, SystemGeneratedNote, THERMAL_LOGO, THERMAL_LOGO_SRC, cx } from "./ui";
 
 /** Booking payments that get a printed receipt: advance taken (IN) and refunds (OUT); adjustments print on the bill */
 export const isReceiptPayment = (p: Payment) => p.mode !== "ADVANCE";
@@ -154,10 +154,10 @@ export function AdvanceReceiptThermal({ booking: b, payment: p, store, width = 8
   return (
     <div
       className={`paper thermal-area thermal-${width} bg-surface text-black`}
-      style={{ width: narrow ? "48mm" : "72mm", fontFamily: "ui-monospace, Consolas, 'Courier New', monospace", fontSize: narrow ? "9.5px" : "11px", lineHeight: 1.25 }}
+      style={{ width: narrow ? "45mm" : "68mm", boxSizing: "border-box", overflowWrap: "anywhere", fontFamily: "ui-monospace, Consolas, 'Courier New', monospace", fontSize: narrow ? "9.5px" : "11px", lineHeight: 1.25 }}
     >
       <div className="text-center">
-        <PrintLogo className="mb-1" imageClassName={narrow ? "h-auto w-[22mm]" : "h-auto w-[28mm]"} />
+        <PrintLogo src={THERMAL_LOGO_SRC} className="mb-1" imageClassName={cx(narrow ? "h-auto w-[34mm]" : "h-auto w-[46mm]", THERMAL_LOGO)} />
         <p className="text-[13px] font-bold uppercase">{store?.storeName ?? "OneRoot Agri Inputs"}</p>
         {store?.address && <p>{[store.address, store.city].filter(Boolean).join(", ")}</p>}
         {store?.phone && <p>Ph: {store.phone}</p>}
