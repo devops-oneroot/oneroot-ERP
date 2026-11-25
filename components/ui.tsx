@@ -1211,6 +1211,7 @@ const statusTones: Record<string, Tone> = {
   SENT: "green",
   OPEN: "blue",
   ACCEPTED: "green",
+  CONVERTED: "violet",
   EXPIRED: "amber",
   SEED: "green",
   FERTILIZER: "blue",

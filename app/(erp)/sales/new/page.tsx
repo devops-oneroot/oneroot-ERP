@@ -46,7 +46,7 @@ import { isFestival, offerConditions, offerCoverage, purposeName, purposeRibbon 
 import { combinePct, covers, offerLabel, priceLines, remainingOf, type PricedLine } from "@/lib/pricing";
 import { defaultPrintMode, printReceipt, receiptWidth } from "@/lib/print";
 import { useScanner } from "@/lib/scanner";
-import { MONEY_MODES, modeLabel, type AdvanceBooking, type Batch, type Category, type Customer, type CustomerType, type HeldBill, type Paged, type PaymentMode, type Product, type RoleLimit, type Sale, type Scheme, type Shift, type StoreSettings, type VanTripDetail } from "@/lib/types";
+import { MONEY_MODES, modeLabel, type AdvanceBooking, type Batch, type Category, type Customer, type CustomerType, type HeldBill, type Paged, type PaymentMode, type Product, type Quotation, type RoleLimit, type Sale, type Scheme, type Shift, type StoreSettings, type VanTripDetail } from "@/lib/types";
 import { LazyCameraScanner, LazyCustomerForm } from "@/components/lazy";
 
 /** Product list row with the POS extras from `withExpiry=true` */
@@ -214,6 +214,12 @@ export default function PosPage() {
   const [queueOpen, setQueueOpen] = useState(false);
   const [printData, setPrintData] = useState<ReceiptData | null>(null);
 
+  // Converting an accepted quotation (?quotationId=…): the bill is the quote, at the quoted prices — products,
+  // quantities, rates and discounts are fixed; no schemes, customer-type or extra bill discount
+  const quotationId = params.get("quotationId");
+  const [quote, setQuote] = useState<Quotation | null>(null);
+  const quoteLocked = !!quotationId;
+
   const alertDays = store?.expiryAlertDays ?? 60;
   // Van mode (?vanTripId=…): the grid shows only what is on the van, with the van's quantities
   const vanTripId = params.get("vanTripId");
@@ -229,6 +235,11 @@ export default function PosPage() {
 
   const pickCustomer = useCallback(
     (c: Customer | null) => {
+      // A quotation for a registered customer is billed to that customer only
+      if (quote?.customerId && c?.id !== quote.customerId) {
+        toast.error(`Quotation ${quote.quotationNo} is for ${quote.customerName} — the customer can't be changed`);
+        return;
+      }
       setCustomer(c);
       setCredit(null);
       setSkipAdvance([]);
@@ -240,7 +251,7 @@ export default function PosPage() {
       // Credit position (overdue dues, hold) comes from the detail endpoint
       if (c) api.get<Customer>(`/customers/${c.id}`).then(setCredit).catch(() => {});
     },
-    [store, mode],
+    [store, mode, quote, toast],
   );
 
   // The customer's open advance bookings (needs internet: the advance is checked on the server when the bill is saved)
@@ -341,6 +352,7 @@ export default function PosPage() {
       return { ok: false, message };
     };
     if (needBranch.blocked) return fail("Pick a branch in the top bar to bill from");
+    if (quoteLocked) return fail("Billing a quotation — the products are fixed as quoted");
     const left = sellableOf(p) - inCart(p.id);
     if (left < 1) return fail(sellableOf(p) > 0 ? `No more sellable stock of ${p.name}` : `${p.name} is out of stock here`);
     const added = { ok: true, message: `Added ${p.name} · ${qty(inCart(p.id) + 1)} in cart` };
@@ -376,6 +388,10 @@ export default function PosPage() {
   useScanner(scanCode, !done && !camOpen && !quickAdd && !need && holdLabel === null && !holdsOpen);
 
   function step(key: number, delta: number) {
+    if (quoteLocked) {
+      toast.error("Billing a quotation — the quantities are fixed as quoted");
+      return;
+    }
     setLines((ls) =>
       ls.flatMap((l) => {
         if (l.key !== key) return [l];
@@ -402,8 +418,21 @@ export default function PosPage() {
     return Math.max(0, all - own);
   };
 
-  const update = (key: number, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
-  const remove = (key: number) => setLines((ls) => ls.filter((l) => l.key !== key));
+  const update = (key: number, patch: Partial<Line>) => {
+    // A quotation's quantity, rate and discount stay as quoted (only the batch / serials are picked)
+    if (quoteLocked && ("quantity" in patch || "rate" in patch || "discountPct" in patch)) {
+      toast.error("Billing a quotation — quantity, rate and discount are fixed as quoted");
+      return;
+    }
+    setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  };
+  const remove = (key: number) => {
+    if (quoteLocked) {
+      toast.error("Billing a quotation — the products are fixed as quoted");
+      return;
+    }
+    setLines((ls) => ls.filter((l) => l.key !== key));
+  };
 
   function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== "Enter") return;
@@ -423,20 +452,20 @@ export default function PosPage() {
   const pricing = useMemo(() => {
     const r = priceLines(
       lines.map((l) => ({ productId: l.product.id, categoryId: l.product.categoryId, quantity: n(l.quantity), rate: n(l.rate), manualPct: Math.min(100, Math.max(0, n(l.discountPct))), isSubsidised: !!l.product.isSubsidised })),
-      schemes ?? [],
-      credit ?? customer ? (credit ?? customer)?.customerType : walkInType,
+      quoteLocked ? [] : (schemes ?? []),
+      quoteLocked ? null : credit ?? customer ? (credit ?? customer)?.customerType : walkInType,
     );
     const byKey = new Map<number, PricedLine>();
     lines.forEach((l, i) => byKey.set(l.key, r.lines[i]));
     return { ...r, byKey };
-  }, [lines, schemes, customer, credit, walkInType]);
+  }, [lines, schemes, customer, credit, walkInType, quoteLocked]);
 
   // ── Bill math (mirrors the server: GST-inclusive rates, bill discount spread pro-rata) ──
   const summary = useMemo(() => {
     const itemsTotal = lines.reduce((s, l) => s + lineGross(l, pricing.byKey.get(l.key)), 0);
     // What offers and the customer-type discount took off (already inside itemsTotal)
     const offerSavings = Math.max(0, lines.reduce((s, l) => s + lineBeforeOffers(l, pricing.byKey.get(l.key)), 0) - itemsTotal);
-    const discount = Math.min(n(billDiscount), itemsTotal);
+    const discount = quoteLocked ? 0 : Math.min(n(billDiscount), itemsTotal);
     const factor = itemsTotal > 0 ? 1 - discount / itemsTotal : 1;
     let tax = 0;
     for (const l of lines) {
@@ -461,14 +490,76 @@ export default function PosPage() {
       count: lines.reduce((s, l) => s + n(l.quantity), 0),
       manualMax,
     };
-  }, [lines, billDiscount, pricing]);
+  }, [lines, billDiscount, pricing, quoteLocked]);
+  // ── Convert a quotation: load it once the products are in, with the customer and the quoted lines ──
+  const quoteLoaded = useRef<string | null>(null);
+  useEffect(() => {
+    if (!quotationId || quoteLoaded.current === quotationId || !catalogue.data) return;
+    quoteLoaded.current = quotationId;
+    void (async () => {
+      try {
+        const q = await api.get<Quotation>(`/quotations/${quotationId}`);
+        if (q.status !== "ACCEPTED") {
+          toast.error(
+            q.status === "CONVERTED"
+              ? `${q.quotationNo} is already billed${q.sale ? ` as ${q.sale.invoiceNo}` : ""}`
+              : `${q.quotationNo} is ${q.status.toLowerCase()} — only an accepted quotation can be billed`,
+          );
+          router.replace(`/quotations/${q.id}`);
+          return;
+        }
+        const byId = new Map(products.map((p) => [p.id, p]));
+        const missing = (q.items ?? []).filter((i) => !byId.has(i.productId));
+        if (missing.length) {
+          toast.error(`${missing.map((m) => m.productName).join(", ")} can't be sold here now — check the product is active`);
+          router.replace(`/quotations/${q.id}`);
+          return;
+        }
+        const built: Line[] = (q.items ?? []).map((i) => ({
+          key: ++keySeq.current,
+          product: byId.get(i.productId)!,
+          batches: null,
+          batchId: "",
+          quantity: String(n(i.quantity)),
+          rate: String(n(i.rate)),
+          discountPct: n(i.discountPct) ? String(n(i.discountPct)) : "",
+          serialNos: [],
+        }));
+        setQuote(q);
+        setLines(built);
+        setBillDiscount("");
+        setInterState(q.isInterState);
+        for (const l of built) {
+          api
+            .get<Product>(`/products/${l.product.id}`)
+            .then((full) => setLines((ls) => ls.map((x) => (x.key === l.key ? { ...x, batches: full.batches ?? [] } : x))))
+            .catch(() => setLines((ls) => ls.map((x) => (x.key === l.key ? { ...x, batches: [] } : x))));
+        }
+        if (q.customerId) {
+          const c = await api.get<Customer>(`/customers/${q.customerId}`);
+          setCustomer(c);
+          setCredit(c);
+          setPhone(c.phone ?? "");
+        } else {
+          setCustomer(null);
+          setWalkinName(q.customerName);
+          const digits = (q.customerPhone ?? "").replace(/D/g, "");
+          setPhone(digits.length >= 10 ? digits.slice(-10) : "");
+        }
+        toast.success(`Quotation ${q.quotationNo} loaded — billed at the quoted prices`);
+      } catch (e) {
+        toast.error(errMsg(e));
+      }
+    })();
+  }, [quotationId, catalogue.data, products, toast, router]);
+
   // The top bar's cart opens the bill
   const openBill = useCallback(() => setCartOpen(true), []);
   useOpenBillHandler(openBill);
 
   // The bill is kept for this tab (lib/cart), so it and the top bar's cart count survive leaving this page.
   // Restored when the page opens or the branch changes; saved on every change. A van trip's bill is kept apart.
-  const owner = cartOwner(user?.id, current?.id) + (vanTripId ? `:van:${vanTripId}` : "");
+  const owner = cartOwner(user?.id, current?.id) + (vanTripId ? `:van:${vanTripId}` : "") + (quotationId ? `:quote:${quotationId}` : "");
   const billOwner = useRef<string | null>(null);
   const restoring = useRef(false);
   useEffect(() => {
@@ -498,7 +589,8 @@ export default function PosPage() {
       summary.count,
     );
   }, [lines, owner, summary.count]);
-  const aboveLimit = !!limits && limits.maxDiscountPct !== null && summary.manualMax > n(limits.maxDiscountPct) + 1e-9;
+  // A quotation's discount was agreed when it was accepted: no approval needed
+  const aboveLimit = !quoteLocked && !!limits && limits.maxDiscountPct !== null && summary.manualMax > n(limits.maxDiscountPct) + 1e-9;
 
   // ── Advance bookings (mirrors the server): a booking pays for its booked units on this bill, up to their value ──
   const advances = useMemo(() => {
@@ -613,6 +705,8 @@ export default function PosPage() {
 
   function validate(): string | null {
     if (needBranch.blocked) return "Pick a branch in the top bar to bill from";
+    if (quoteLocked && !online) return "Billing a quotation needs internet";
+    if (quoteLocked && !quote) return "The quotation is still loading";
     if (!lines.length) return "Add at least one product";
     for (const l of lines) {
       if (n(l.quantity) <= 0) return `Enter a quantity for ${l.product.name}`;
@@ -745,7 +839,7 @@ export default function PosPage() {
         }
         return [item];
       }),
-      discount: summary.discount || undefined,
+      discount: quoteLocked ? undefined : summary.discount || undefined,
       paidAmount,
       paymentMode: split || !mode || advanceTotal > 0 ? undefined : mode,
       paymentReference: split ? undefined : reference.trim() || undefined,
@@ -758,6 +852,7 @@ export default function PosPage() {
       approvalId,
       vanTripId: vanTripId ?? undefined,
       agentId: agentId || undefined,
+      quotationId: quote?.id,
     };
     if (!online) {
       if (aboveLimit && !approvalId) return toast.error(`A discount above ${n(limits?.maxDiscountPct)}% needs a manager's approval, which needs internet`);
@@ -795,6 +890,11 @@ export default function PosPage() {
   }
 
   function newSale() {
+    // After billing a quotation, the next bill is an ordinary one
+    if (quoteLocked) {
+      setQuote(null);
+      router.replace("/sales/new");
+    }
     setDone(null);
     setLines([]);
     setBillDiscount("");
@@ -819,6 +919,11 @@ export default function PosPage() {
 
   // ── Hold / recall: park the cart on the server so any counter of the branch can pick it up ──
   async function holdBill() {
+    if (quoteLocked) {
+      toast.error("A quotation bill can't be held — bill it now, or open the quotation again later");
+      setHoldLabel(null);
+      return;
+    }
     setHolding(true);
     try {
       const payload: HoldPayload = {
@@ -1019,6 +1124,24 @@ export default function PosPage() {
       </div>
 
       {needBranch.notice && <div className="mb-4">{needBranch.notice}</div>}
+      {quoteLocked && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-violet-50 px-4 py-2.5 text-sm text-violet-900">
+          <span>
+            {quote ? (
+              <>
+                <b>Billing quotation {quote.quotationNo}</b> · {quote.customerName} · quoted total {inr(quote.totalAmount)} — products, quantities and prices are
+                fixed as quoted; pick the batch / serial no. and the payment
+              </>
+            ) : (
+              "Loading the quotation…"
+            )}
+          </span>
+          <Link href={quote ? `/quotations/${quote.id}` : "/quotations"} className="font-semibold underline">
+            Back to the Quotation
+          </Link>
+        </div>
+      )}
+
       {vanTripId && (
         <div className={cx("mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg px-4 py-2.5 text-sm", van ? "bg-sky-50 text-sky-900" : "bg-amber-50 text-amber-900")}>
           {van ? (

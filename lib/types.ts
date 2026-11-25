@@ -1677,7 +1677,8 @@ export interface VendorProductLink {
   linkedAt: string;
 }
 
-export type QuotationStatus = "OPEN" | "ACCEPTED" | "REJECTED" | "CANCELLED";
+/** CONVERTED: billed as a sale (Convert to Sale) */
+export type QuotationStatus = "OPEN" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "CONVERTED";
 
 export interface QuotationItem {
   id: string;
@@ -1737,6 +1738,16 @@ export interface Quotation {
   user?: { name: string } | null;
   createdAt: string;
   _count?: { items: number };
+  /** The bill it was converted into */
+  saleId?: string | null;
+  convertedAt?: string | null;
+  sale?: { id: string; invoiceNo: string; saleDate: string; status: string } | null;
+}
+
+/** Products short in this branch before a quotation is billed (empty = all in stock) */
+export interface QuotationStockCheck {
+  ok: boolean;
+  short: { productId: string; name: string; unit: string; needed: number; available: number }[];
 }
 
 export type PettyCashType = "TOP_UP" | "SPEND";

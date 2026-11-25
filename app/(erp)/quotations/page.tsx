@@ -58,6 +58,7 @@ export default function QuotationsPage() {
             <option value="all">All</option>
             <option value="OPEN">Open</option>
             <option value="ACCEPTED">Accepted</option>
+            <option value="CONVERTED">Converted</option>
             <option value="REJECTED">Rejected</option>
             <option value="CANCELLED">Cancelled</option>
           </Select>
