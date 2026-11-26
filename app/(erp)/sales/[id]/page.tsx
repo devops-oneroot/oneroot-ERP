@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ApprovalGate, approvalNeeded, type ApprovalNeed } from "@/components/ApprovalGate";
 import { LazyReturnTermsModal } from "@/components/lazy";
 import { PrintPortal } from "@/components/PrintPortal";
+import { FitToWidth } from "@/components/FitToWidth";
 import { SaleInvoice } from "@/components/SaleInvoice";
 import { ThermalReceipt, receiptFromSale } from "@/components/ThermalReceipt";
 import {
@@ -156,10 +157,11 @@ export default function SaleDetailPage() {
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_320px]">
         <div className="paper print-area min-w-0 rounded-xl border border-slate-200 bg-surface p-5 shadow-sm sm:p-8">
-          <div className="overflow-x-auto">
-            <div className="min-w-[680px]">
+          {/* The A4 invoice scales down to fit the column: always fully visible, no sideways scrolling */}
+          <div>
+            <FitToWidth width={760}>
               <SaleInvoice sale={sale} settings={settings} />
-            </div>
+            </FitToWidth>
           </div>
         </div>
 
