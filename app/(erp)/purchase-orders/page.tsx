@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardCheck, PackageCheck, Plus } from "lucide-react";
+import { ClipboardCheck, PackageCheck, Plus, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -8,7 +8,8 @@ import { RequirePerm } from "@/components/AppShell";
 import { BranchCode } from "@/components/BranchNotice";
 import { GstSheetButton } from "@/components/GstSheetExport";
 import { ListFilters, hasListFilters, noListFilters } from "@/components/ListFilters";
-import { ActionsTd, ActionsTh, Badge, Button, Card, EmptyRow, ErrorBox, LoadingRow, PageHeader, Pagination, RowAction, StatusBadge, Table, Tabs, Td, Th, cx } from "@/components/ui";
+import { ActionsTd, ActionsTh, Badge, Button, Card, EmptyRow, ErrorBox, LoadingRow, PageHeader, Pagination, RowAction, StatusBadge, Table, Tabs, Td, Th, cx, errMsg, useConfirm, useToast } from "@/components/ui";
+import { api } from "@/lib/api";
 import { date, inr, n } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
@@ -29,6 +30,7 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: "REJECTED", label: "Rejected" },
   { value: "DRAFT", label: "Draft" },
   { value: "CANCELLED", label: "Cancelled" },
+  { value: "EXPIRED", label: "Expired" },
 ];
 
 interface PoList extends Paged<PurchaseOrder> {
@@ -56,10 +58,33 @@ function PurchaseOrders() {
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState(noListFilters);
   const { data, error, loading, reload } = useApi<PoList>("/purchase-orders", { ...filters, status, page, pageSize: 25 });
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [restoring, setRestoring] = useState<string | null>(null);
+  const expiredTab = status === "EXPIRED";
+
+  async function restore(po: PurchaseOrder) {
+    const ok = await confirm(
+      `Restore ${po.poNo}? It goes back to the purchase orders as ${(po.status ?? "").toLowerCase().replace(/_/g, " ")}${po.expiryDays ? `, valid for ${po.expiryDays} more days from today` : ""}.`,
+      { confirmLabel: "Restore PO" },
+    );
+    if (!ok) return;
+    setRestoring(po.id);
+    try {
+      await api.post(`/purchase-orders/${po.id}/restore`);
+      toast.success(`${po.poNo} restored`);
+      void reload();
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setRestoring(null);
+    }
+  }
 
   const counts = data?.counts ?? {};
-  const all = Object.values(counts).reduce((s, c) => s + (c ?? 0), 0);
-  const tabs = FILTERS.filter((f) => f.value === "" || f.value === status || (counts[f.value] ?? 0) > 0).map((f) => {
+  // Expired POs are off the list, so not part of "All"
+  const all = Object.entries(counts).reduce((s, [k, c]) => (k === "EXPIRED" ? s : s + (c ?? 0)), 0);
+  const tabs = FILTERS.filter((f) => f.value === "" || f.value === "EXPIRED" || f.value === status || (counts[f.value] ?? 0) > 0).map((f) => {
     const c = f.value === "" ? all : (counts[f.value] ?? 0);
     return {
       value: f.value,
@@ -150,7 +175,9 @@ function PurchaseOrders() {
                 <LoadingRow colSpan={5} />
               ) : !items.length ? (
                 <EmptyRow colSpan={5}>
-                  {status || hasListFilters(filters) ? (
+                  {expiredTab ? (
+                    "No expired purchase orders"
+                  ) : status || hasListFilters(filters) ? (
                     "No purchase orders match these filters"
                   ) : !canCreate ? (
                     "No purchase orders yet."
@@ -165,14 +192,20 @@ function PurchaseOrders() {
                 </EmptyRow>
               ) : (
                 items.map((po) => {
-                  const receivable = po.status === "APPROVED" || po.status === "PARTIALLY_RECEIVED";
+                  const expired = !!po.deletedAt;
+                  const receivable = !expired && (po.status === "APPROVED" || po.status === "PARTIALLY_RECEIVED");
                   return (
                     <tr key={po.id} className="hover:bg-slate-50">
                       <Td>
                         <div className="flex items-center gap-1.5">
-                          <Link href={`/purchase-orders/${po.id}`} className="whitespace-nowrap font-medium text-slate-900 hover:text-brand-700">
-                            {po.poNo}
-                          </Link>
+                          {expired ? (
+                            // An expired PO can't be opened until it is restored
+                            <span className="whitespace-nowrap font-medium text-slate-900">{po.poNo}</span>
+                          ) : (
+                            <Link href={`/purchase-orders/${po.id}`} className="whitespace-nowrap font-medium text-slate-900 hover:text-brand-700">
+                              {po.poNo}
+                            </Link>
+                          )}
                           {po.round > 1 && <Badge tone="violet">Round {po.round}</Badge>}
                           {(currentId === "all" || po.branch?.id !== currentId) && po.branch && <BranchCode code={po.branch.code} title={`Deliver to ${po.branch.name}`} />}
                         </div>
@@ -195,6 +228,11 @@ function PurchaseOrders() {
                       </Td>
                       <Td>
                         <StatusBadge status={po.displayStatus ?? po.status} />
+                        {expired && (
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            On {date(po.deletedAt)} · was {(po.status ?? "").toLowerCase().replace(/_/g, " ")}
+                          </p>
+                        )}
                         {po.displayStatus === "PARTIALLY_APPROVED" && (
                           <p className="num mt-0.5 text-xs text-slate-500">
                             {po.level} of {po.levelsNeeded} levels approved
@@ -217,8 +255,24 @@ function PurchaseOrders() {
                               Receive
                             </Button>
                           )}
-                          <RowAction kind="view" label="Open" href={`/purchase-orders/${po.id}`} title={`Open ${po.poNo}`} />
-                          {mayEdit(po) && (
+                          {expired ? (
+                            po.canRestore ? (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                icon={<RotateCcw className="size-4" />}
+                                loading={restoring === po.id}
+                                onClick={() => restore(po)}
+                              >
+                                Restore
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-slate-500">L2 or above can restore</span>
+                            )
+                          ) : (
+                            <RowAction kind="view" label="Open" href={`/purchase-orders/${po.id}`} title={`Open ${po.poNo}`} />
+                          )}
+                          {!expired && mayEdit(po) && (
                             <RowAction
                               kind="edit"
                               label={po.status === "DRAFT" ? "Edit Draft" : undefined}

@@ -3,7 +3,7 @@
 import { CheckCheck, RefreshCw, Repeat, Settings2, UserCheck, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { ApprovalChain } from "@/components/ApprovalChain";
 import { GrnApprovals } from "@/components/GrnApprovals";
 import {
@@ -132,16 +132,17 @@ export default function ApprovalsPage() {
         }
       />
 
-      <Tabs<"po" | "grn">
-        value={tab}
-        onChange={setTab}
-        tabs={[
-          { value: "po", label: <>Purchase Orders{data?.mine ? <span className="ml-1.5"><Badge tone="amber">{data.mine}</Badge></span> : null}</> },
-          ...(GRN_APPROVAL
-            ? [{ value: "grn" as const, label: <>Goods Inward{grn.data?.mine ? <span className="ml-1.5"><Badge tone="amber">{grn.data.mine}</Badge></span> : null}</> }]
-            : []),
-        ]}
-      />
+      {/* Tabs only when there is a second one: with GRN approval off the page is purchase orders only */}
+      {GRN_APPROVAL && (
+        <Tabs<"po" | "grn">
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            { value: "po", label: <>Purchase Orders{data?.mine ? <span className="ml-1.5"><Badge tone="amber">{data.mine}</Badge></span> : null}</> },
+            { value: "grn", label: <>Goods Inward{grn.data?.mine ? <span className="ml-1.5"><Badge tone="amber">{grn.data.mine}</Badge></span> : null}</> },
+          ]}
+        />
+      )}
 
       {tab === "grn" && <GrnApprovals data={grn.data} error={grn.error} loading={grn.loading} reload={() => void grn.reload()} />}
 
@@ -152,11 +153,16 @@ export default function ApprovalsPage() {
       )}
 
       {tab === "po" && data && (
-        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+        // All cards (one per approval step + Re-Approvals + Waiting for You) on one line from lg up
+        <div
+          className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:[grid-template-columns:repeat(var(--cards),minmax(0,1fr))]"
+          style={{ "--cards": data.byStep.length + 2 } as CSSProperties}
+        >
           {data.byStep.map((s, i) => (
             <StatCard
               key={i}
-              label={`${s.title} · ${s.approverName ?? "any manager"}`}
+              label={s.title}
+              labelSub={s.approverName ?? "Any manager"}
               value={s.waiting}
               sub={s.waiting === 1 ? "PO waiting" : "POs waiting"}
               icon={<Users />}

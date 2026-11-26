@@ -18,7 +18,7 @@ export type PoStatus =
   | "REJECTED"
   | "CANCELLED";
 /** What a PO shows: its status, with approval split by level (some levels approved, or rejected after some approved) */
-export type PoDisplayStatus = PoStatus | "PARTIALLY_APPROVED" | "PARTIALLY_REJECTED";
+export type PoDisplayStatus = PoStatus | "PARTIALLY_APPROVED" | "PARTIALLY_REJECTED" | "EXPIRED";
 export type DebitNoteStatus = "DRAFT" | "SENT" | "CANCELLED";
 export type NotificationType = "INFO" | "SUCCESS" | "WARNING" | "DANGER";
 export type MovementType =
@@ -1021,6 +1021,10 @@ export interface PurchaseOrder {
   roundOff?: Dec;
   status: PoStatus;
   displayStatus?: PoDisplayStatus;
+  /** Set when the PO expired (its validity ran out) and was taken off the list */
+  deletedAt?: string | null;
+  /** Expired tab: whether this user (L2 or above) may restore it */
+  canRestore?: boolean;
   subtotal: Dec;
   taxAmount: Dec;
   /** Saved by the backend from the vendor's and the delivery branch's state: IGST when true */

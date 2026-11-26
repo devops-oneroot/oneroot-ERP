@@ -1137,12 +1137,15 @@ export function Card({
 
 export function StatCard({
   label,
+  labelSub,
   value,
   sub,
   icon,
   tone = "slate",
 }: {
   label: string;
+  /** Smaller line under the label (e.g. who can approve) */
+  labelSub?: ReactNode;
   value: ReactNode;
   sub?: ReactNode;
   icon?: ReactNode;
@@ -1158,7 +1161,10 @@ export function StatCard({
   return (
     <div className="min-w-0 rounded-xl border border-slate-200 bg-surface p-3 shadow-sm sm:p-4">
       <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+        <div className="min-w-0">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+          {labelSub && <p className="mt-0.5 text-xs text-slate-400">{labelSub}</p>}
+        </div>
         {icon && <span className={cx("rounded-lg p-1.5 [&>svg]:size-4", tones[tone])}>{icon}</span>}
       </div>
       <p className="num mt-2 break-words text-xl font-semibold text-slate-900 sm:text-2xl">{value}</p>
