@@ -975,22 +975,25 @@ export function Field({
   required,
   className,
   children,
+  as: Tag = "label",
 }: {
   label: string;
   hint?: string;
   required?: boolean;
   className?: string;
   children: ReactNode;
+  /** "div" for content with several buttons (pickers): a <label> forwards stray clicks to its first control */
+  as?: "label" | "div";
 }) {
   return (
-    <label className={cx("block", className)}>
+    <Tag className={cx("block", className)}>
       <span className="mb-1 block text-xs font-medium text-slate-600">
         {label}
         {required && <span className="text-red-500"> *</span>}
       </span>
       {children}
       {hint && <span className="mt-1 block text-xs text-slate-400">{hint}</span>}
-    </label>
+    </Tag>
   );
 }
 

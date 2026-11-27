@@ -257,7 +257,7 @@ export function QuotationForm({ quotation }: { quotation?: Quotation }) {
                 ))}
               </div>
             </div>
-            <Field label="Fill from a registered customer" hint="Optional — or type the details below">
+            <Field label="Fill from a registered customer" hint="Optional — or type the details below" as="div">
               <CustomerPicker value={customer} onChange={fillFrom} />
             </Field>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

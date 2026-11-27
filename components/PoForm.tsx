@@ -364,7 +364,7 @@ export function PoForm({ po, presetVendorId }: { po?: PurchaseOrder; presetVendo
           {!po && <span className="text-xs text-slate-400">assigned when you save</span>}
         </p>
         <div className={cx("grid grid-cols-1 gap-3 sm:grid-cols-2", showBranch ? "lg:grid-cols-6" : "lg:grid-cols-5")}>
-          <Field label="Vendor" required className="sm:col-span-2">
+          <Field label="Vendor" required className="sm:col-span-2" as="div">
             <VendorPicker value={vendor} onChange={setVendor} autoFocus={!vendor} />
           </Field>
           {/* Past dates are allowed, e.g. to record an order already placed with the vendor */}

@@ -104,7 +104,12 @@ function AsyncPicker<T extends { id: string }>({
               key={item.id}
               type="button"
               onMouseEnter={() => setActive(i)}
-              onClick={() => pick(item)}
+              onClick={(e) => {
+                // Inside a <label> (Field) the browser would forward this click to the label's first control once the
+                // list closes — the picked party's Clear button — undoing the pick. preventDefault stops that.
+                e.preventDefault();
+                pick(item);
+              }}
               className={cx("block w-full px-3 py-2 text-left text-sm", i === active ? "bg-brand-50" : "hover:bg-slate-50")}
             >
               {renderItem(item)}
@@ -184,7 +189,13 @@ function PartySlot<T extends { id: string; name: string }>({
         <span className="font-medium text-slate-800">{value.name}</span>
         <span className="ml-2 text-xs text-slate-500">{describe(value)}</span>
       </div>
-      <button type="button" onClick={onClear} className="-mr-1.5 shrink-0 rounded p-1.5 text-slate-400 hover:text-slate-700" aria-label="Clear">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          onClear();
+        }}
+        className="-mr-1.5 shrink-0 rounded p-1.5 text-slate-400 hover:text-slate-700" aria-label="Clear">
         <X className="size-4" />
       </button>
     </div>
