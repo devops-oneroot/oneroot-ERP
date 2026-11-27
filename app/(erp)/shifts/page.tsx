@@ -88,12 +88,13 @@ export default function ShiftsPage() {
 
       {shift && b && (
         <Card className="mb-4" title={`Your Open Shift · ${shift.shiftNo}`} actions={<span className="text-xs text-slate-500">opened {dateTime(shift.openedAt)}</span>}>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className={cx("grid grid-cols-2 gap-3 sm:grid-cols-3", b.cashCancellations ? "lg:grid-cols-7" : "lg:grid-cols-6")}>
             <Mini label="Opening Float" value={inr(b.openingFloat)} />
             <Mini label="Cash Sales & Receipts" value={inr(b.cashSales)} tone="green" />
             <Mini label="Cash Paid to Vendors" value={inr(b.vendorCashPayments)} />
             <Mini label="Cash Expenses" value={inr(b.cashExpenses)} />
             <Mini label="Cash Refunds" value={inr(b.cashRefunds)} />
+            {!!b.cashCancellations && <Mini label="Cancelled Bills (Cash Back)" value={inr(b.cashCancellations)} />}
             <Mini label="Expected in Drawer" value={inr(b.expected)} strong />
           </div>
           {!settings?.requireOpenShift && can("admin.settings") && (
@@ -505,6 +506,7 @@ function CloseShiftBody({ shift, onClose, onSaved }: { shift: Shift; onClose: ()
               <Row l="Paid to Vendors (Cash)" v={`− ${inr(b.vendorCashPayments)}`} />
               <Row l="Cash Expenses" v={`− ${inr(b.cashExpenses)}`} />
               <Row l="Cash Refunds" v={`− ${inr(b.cashRefunds)}`} />
+              {!!b.cashCancellations && <Row l="Cancelled Bills (Cash Back)" v={`− ${inr(b.cashCancellations)}`} />}
               <div className="flex justify-between border-t border-slate-200 pt-1 font-semibold">
                 <dt>Expected</dt>
                 <dd className="num">{inr(b.expected)}</dd>

@@ -408,6 +408,8 @@ export interface CashBreakdown {
   vendorCashPayments: number;
   cashExpenses: number;
   cashRefunds: number;
+  /** Cash handed back for bills cancelled in this shift that were paid in an earlier (closed) shift or none */
+  cashCancellations?: number;
   expected: number;
 }
 
