@@ -1132,10 +1132,10 @@ function PoPrint({ po, store, notApproved }: { po: PurchaseOrder; store: StoreSe
               <div id="po-print-body" className="flex flex-col">
                 {/* ── Header ── */}
                 <div className="flex items-center justify-between gap-6 border-b-[3px] border-forest-700 pb-3">
-                  {/* The full horizontal "oneroot" logo stands in for the company name */}
-                  <div className="flex flex-col items-start gap-1.5">
+                  {/* The full horizontal "oneroot" logo stands in for the company name; address and GSTIN beside it */}
+                  <div className="flex items-center gap-3">
                     <PrintLogo src={LOGOS.horizontal.src} className="mx-0 shrink-0" imageClassName="h-9 w-auto" />
-                    <div>
+                    <div className="border-l border-slate-300 pl-3">
                       <p className="text-[10.5px] text-slate-500">{join(store?.address, store?.city, store?.state, store?.pincode)}</p>
                       {store?.gstin && <p className="text-[10.5px] text-slate-500">GSTIN: {store.gstin}</p>}
                     </div>
