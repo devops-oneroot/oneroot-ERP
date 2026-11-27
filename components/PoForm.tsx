@@ -256,8 +256,8 @@ export function PoForm({ po, presetVendorId }: { po?: PurchaseOrder; presetVendo
   ];
   const vendorBranchId = vendorBranchChoice ?? vendorBranches?.[0]?.id ?? "";
   const vendorBranch = branchChoices.find((b) => b.id === vendorBranchId) ?? null;
-  // Same as the backend: the branch's GSTIN / state decide intra- or inter-state when it has them
-  const supplier = vendorBranch && (vendorBranch.gstin || vendorBranch.state) ? vendorBranch : vendor;
+  // Same as the backend: the branch decides intra- or inter-state only with its own GSTIN, else the vendor
+  const supplier = vendorBranch?.gstin ? vendorBranch : vendor;
   const igst = isInterState(supplier, store);
   const pos = placeOfSupply(supplier, store);
   const route = rules ? chainForValue(rules, total) : null;

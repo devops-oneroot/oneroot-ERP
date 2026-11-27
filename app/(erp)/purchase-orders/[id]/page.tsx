@@ -1,5 +1,6 @@
 "use client";
 
+import { LOGOS } from "@/lib/logos";
 import {
   ArrowLeft,
   Ban,
@@ -59,8 +60,8 @@ import { PO_PAYMENT_TERMS, type PoHistory, type PurchaseOrder, type StoreSetting
 
 type Decision = "approve" | "send_back" | "reject";
 
-/** Who supplies the PO for GST: the vendor branch when it has a GSTIN / state, else the vendor (as the backend decides) */
-const supplierOf = (po: PurchaseOrder) => (po.vendorBranch && (po.vendorBranch.gstin || po.vendorBranch.state) ? po.vendorBranch : po.vendor);
+/** Who supplies the PO for GST: the vendor branch when it has its own GSTIN, else the vendor (as the backend decides) */
+const supplierOf = (po: PurchaseOrder) => (po.vendorBranch?.gstin ? po.vendorBranch : po.vendor);
 
 export default function PurchaseOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -1131,10 +1132,10 @@ function PoPrint({ po, store, notApproved }: { po: PurchaseOrder; store: StoreSe
               <div id="po-print-body" className="flex flex-col">
                 {/* ── Header ── */}
                 <div className="flex items-center justify-between gap-6 border-b-[3px] border-forest-700 pb-3">
-                  <div className="flex items-center gap-3">
-                    <PrintLogo className="mx-0 shrink-0" />
-                    <div className="border-l border-slate-300 pl-3">
-                      <p className="text-[15px] font-bold leading-tight text-slate-900">{store?.storeName ?? "OneRoot"}</p>
+                  {/* The full horizontal "oneroot" logo stands in for the company name */}
+                  <div className="flex flex-col items-start gap-1.5">
+                    <PrintLogo src={LOGOS.horizontal.src} className="mx-0 shrink-0" imageClassName="h-9 w-auto" />
+                    <div>
                       <p className="text-[10.5px] text-slate-500">{join(store?.address, store?.city, store?.state, store?.pincode)}</p>
                       {store?.gstin && <p className="text-[10.5px] text-slate-500">GSTIN: {store.gstin}</p>}
                     </div>
